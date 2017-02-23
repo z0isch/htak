@@ -21,6 +21,10 @@ library
                      , Tak.Printer.PTN
   build-depends:       base >= 4.7 && < 5
                      , trifecta
+                     , lens
+                     , containers
+                     , dlist
+                     , safe
   default-language:    Haskell2010
 
 executable htak-exe
