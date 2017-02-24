@@ -7,7 +7,7 @@ import           Text.Trifecta
 
 type InformationalMark = String
 type Comment = String
-type PTNMove = [Either Comment (Move,Maybe InformationalMark)]
+type PTNMove = [Either Comment (Either GameOverState Move,Maybe InformationalMark)]
 
 gameParser :: Parser [PTNMove]
 gameParser = some (token ptnMoveParser)
@@ -18,20 +18,27 @@ ptnMoveParser = lineNumParser *> some eParser
     eParser = try (Left <$> token commentParser)
                 <|> (Right <$> token moveAndInfo)
     lineNumParser = some digit <* (char '.' <* space)
-    moveAndInfo = (,) <$> moveParser <*> optional informationalMarkParser
+    moveAndInfo = (,) <$> (try (Right <$> moveParser)
+                          <|> (Left <$> gameOverParser))
+                      <*> optional informationalMarkParser
 
 moveParser :: Parser Move
 moveParser = try moveStoneParser
-             <|> try placeParser
-             <|> try drawParser
-             <|> try roadWinParser
-             <|> try flatWinParser
-             <|> resignParser
+             <|> placeParser
   where
     moveStoneParser = Move <$> (fromMaybe 0 <$> optional int)
                           <*> coordParser
                           <*> directionParser
                           <*> (many int <* skipOptional pieceTypeParser)
+    placeParser = Place <$> pieceTypeParser
+                        <*> coordParser
+
+gameOverParser :: Parser GameOverState
+gameOverParser =  drawParser
+             <|> try roadWinParser
+             <|> try flatWinParser
+             <|> resignParser
+  where
     drawParser = Draw <$ string "1/2-1/2"
     roadWinParser = try (RoadWin Player1 <$ string "R-0")
                     <|> RoadWin Player2 <$ string "0-R"
@@ -39,8 +46,6 @@ moveParser = try moveStoneParser
                     <|> FlatWin Player2 <$ string "0-F"
     resignParser =  try (ResignWin Player1 <$ string "1-0")
                     <|> ResignWin Player2 <$ string "0-1"
-    placeParser = Place <$> pieceTypeParser
-                        <*> coordParser
 
 informationalMarkParser :: Parser InformationalMark
 informationalMarkParser = some (oneOf "?!'")

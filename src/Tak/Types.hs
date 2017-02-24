@@ -8,7 +8,6 @@ import qualified Data.DList      as DL
 import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
-import           Safe            (headMay)
 
 type Rank = Int
 type File = Char
@@ -36,27 +35,32 @@ data PieceType = Flat | Standing | Cap
 
 data Move = Place PieceType Coord
           | Move Int Coord Direction [Int]
-          | RoadWin Player
-          | FlatWin Player
-          | ResignWin Player
-          | Draw
   deriving (Eq, Show)
 
+data GameOverState = RoadWin Player
+                    | FlatWin Player
+                    | ResignWin Player
+                    | Draw
+  deriving (Eq,Show)
+
 data GameState = GameState
-  { _gsBoard        :: Map Coord [(Player,PieceType)]
-  , _gsMoves        :: DList Move
-  , _gsCurrPlayer   :: Player
-  , _gsSupplyPieces :: Map Player (Int, Int)
+  { _gsBoard         :: Map Coord [(Player,PieceType)]
+  , _gsMoves         :: DList Move
+  , _gsCurrPlayer    :: Player
+  , _gsSupplyPieces  :: Map Player (Int, Int)
+  , _gsGameOverState :: Maybe GameOverState
   }
   deriving (Eq,Show)
 makeLenses ''GameState
 
 initialGameState :: BoardSize -> GameState
 initialGameState s = GameState
-  { _gsBoard = foldl' (\m c -> M.insert c [] m) M.empty $ concatMap (zip (take s ['a'..]) . repeat) [1..s]
+  { _gsBoard = foldl' (\m c -> M.insert c [] m) M.empty
+               $ concatMap (zip (take s ['a'..]) . repeat) [1..s]
   , _gsMoves = DL.empty
   , _gsCurrPlayer = Player1
   , _gsSupplyPieces = M.insert Player2 (pieces s) $ M.insert Player1 (pieces s) M.empty
+  , _gsGameOverState = Nothing
   }
   where
     pieces 3 = (10,0)
@@ -77,32 +81,26 @@ makeMove gs m = GameState
     _             -> gs^.gsSupplyPieces
   }
   where
-    updateSupply l = M.update (Just <$> over l pred) (gs^.gsCurrPlayer) (gs^.gsSupplyPieces)
+    updateSupply l = M.update (Just . over l pred) (gs^.gsCurrPlayer) (gs^.gsSupplyPieces)
 
 updateBoard :: GameState -> Move -> Map Coord [(Player,PieceType)]
-updateBoard gs (Place pT c) = M.update (const (Just [(gs^.gsCurrPlayer, pT)])) c $ gs^.gsBoard
+updateBoard gs (Place pT c) = M.insert c [(gs^.gsCurrPlayer, pT)] $ gs^.gsBoard
 updateBoard gs (Move i c d xs) = go (gs^.gsBoard) i c xs
   where
     go m _ _ [] = m
-    go m 1 c' [1]
-      | smashPossible = smashMove
-      | otherwise = normalMove m 1 c' [1]
+    go m i' c' (x':xs') = go newBoard (i' - x') newCoord xs'
       where
-        nC = goDirection d c'
-        p = head $ m M.! c'
-        smashPossible = snd p == Cap
-        removeCap = M.update (Just <$> tail) c' m
-        smashMove = M.update (Just <$> (:) p . over (ix 0 . _2) flattenWall) nC removeCap
+        newCoord = goDirection d c'
+        pcs@(p:_) = take i' $ m M.! c'
+        removePcs = M.update (Just . drop i') c' m
+        newBoard = M.update (Just . (++) pcs . smashTopPieceIfNeeded) newCoord removePcs
+        smashPossible = i' == 1 && null xs' && x' == 1 && snd p == Cap
+        smashTopPieceIfNeeded
+          | smashPossible = over (ix 0 . _2) flattenWall
+          | otherwise = id
         flattenWall Standing = Flat
         flattenWall s = s
-    go m i' c' (x':xs') = normalMove m i' c' (x':xs')
-    normalMove m i' c' (x':xs') = go nM (i' - x') nC xs'
-      where
-        nC = goDirection d c'
-        pcs = take i' $ m M.! c'
-        removePcs = M.update (Just <$> drop i') c' m
-        nM = M.update (Just <$> (++) pcs) nC removePcs
-updateBoard gs _ = gs^.gsBoard
+
 
 g1 = makeMove (initialGameState 4) (Place Flat ('a',1))
 g2 = makeMove g1 (Place Flat ('a',2))

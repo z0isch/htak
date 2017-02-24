@@ -11,7 +11,7 @@ main =  do
   mvs <- getMoves "./ptn/game1.ptn"
   mapM_ putStrLn (printMoves mvs)
 
-getMoves :: String -> IO [[Move]]
+getMoves :: String -> IO [[Either GameOverState Move]]
 getMoves f = do
   result <- parseFromFile gameParser f
   case result of
