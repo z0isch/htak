@@ -3,6 +3,7 @@
 module Tak.Types where
 
 import           Control.Lens
+import           Data.Char        (ord)
 import           Data.DList       (DList)
 import qualified Data.DList       as DL
 import           Data.Foldable
@@ -19,6 +20,9 @@ type Coord = (File, Rank)
 
 isAdjacent :: Coord -> Coord -> Bool
 isAdjacent c1 c2 = any ((==) c2 . flip goDirection c1) [L,R,U,D]
+
+manhattenDist :: Coord -> Coord -> Int
+manhattenDist (x1,y1) (x2,y2) = abs (ord x1 - ord x2) + abs (y1-y2)
 
 type BoardSize = Int
 type BoardState = Map Coord [(Player,PieceType)]
@@ -118,7 +122,7 @@ makeMove gs m  = GameState
 road :: Player -> BoardSize -> BoardState -> Maybe [Coord]
 road p s b = headMay $ mapMaybe shortestPath edgePairs
   where
-    shortestPath (c1,c2) = (:) c1 <$> aStar adjacents (const . const 1) (const 1) (== c2) c1
+    shortestPath (c1,c2) = (:) c1 <$> aStar adjacents manhattenDist (const 1) (== c2) c1
     coords = M.keys $ nonStanding p b
     adjacents c = H.fromList $ filter (isAdjacent c) coords
     edgePairs =  [(x,y) | x <- firstRank, y <- lastRank]
