@@ -23,8 +23,10 @@ library
                      , trifecta
                      , lens
                      , containers
+                     , unordered-containers
                      , dlist
                      , safe
+                     , astar
   default-language:    Haskell2010
 
 executable htak-exe
@@ -36,6 +38,7 @@ executable htak-exe
                      , hspec
                      , ansi-wl-pprint
                      , trifecta
+                     , lens
   default-language:    Haskell2010
 
 test-suite htak-test
