@@ -12,7 +12,8 @@ import qualified Data.HashSet     as H
 import           Data.Map.Strict  (Map)
 import qualified Data.Map.Strict  as M
 import           Data.Maybe
-import           Safe
+import           Safe (headMay)
+import Data.Bool (bool)
 
 type File = Char
 type Rank = Int
@@ -175,8 +176,43 @@ updateBoard _ bs (Move i c d xs) = go bs i c xs
         flattenWall s = s
 updateBoard _ bs _ = bs
 
-g1 = makeMove (initialGameState 4) (Place Flat ('a',1))
-g2 = makeMove g1 (Place Flat ('a',2))
+moves :: GameState -> [Move]
+moves gs = placeMoves ++ moveMoves
+  where
+    firstTwoTurns = length (DL.toList (gs^.gsMoves)) < 2
+    validPieceTypes 
+      | firstTwoTurns = [Flat]
+      | otherwise = (\(r,c) -> bool [Flat,Standing] []  (r==0) 
+                            ++ bool [Cap] [] (c==0))
+                    $ (gs^.gsSupplyPieces) M.! (gs^.gsCurrPlayer)
+    emptySpaces = M.keys $ M.filter null (gs^.gsBoard)                      
+    placeMoves = [Place pT c | pT <- validPieceTypes, c <- emptySpaces]
+    playerStacks = M.filter (maybe False ((==) (gs^.gsCurrPlayer) . fst) . headMay) (gs^.gsBoard)
+    moveInDirection :: Direction -> (Coord, [(Player,PieceType)]) -> [Move]
+    moveInDirection d (c, pcs) = concatMap goMove takes
+      where
+        takes = [1..(min (gs^.gsBoardSize) (length pcs))]
+        goMove i =  map (Move i c d) $ go c $ take i (map snd pcs)
+        go :: Coord -> [PieceType] -> [[Int]]
+        go _ [] = []
+        go c' ps@(p:_)
+          | canGoInDir = map (\i -> concatMap ((:) i) (go nextCoord (dropFromEnd i ps))) [1..length ps]
+          | otherwise = []
+          where
+            canGoInDir = isEmpty || isPieceType Flat || canSmash
+            isEmpty = maybe False null nextSpot
+            isPieceType pT = maybe False ((==) pT . snd) (nextSpot >>= headMay)
+            canSmash = length ps == 1 && p == Cap && isPieceType Standing
+            dropFromEnd i = reverse . drop i . reverse
+            nextSpot = gs^.gsBoard.at nextCoord
+            nextCoord = goDirection d c'
+    moveMoves 
+      | firstTwoTurns = []
+      | otherwise     = concat $ M.elems $ 
+        M.mapWithKey (\c mv ->concat $ zipWith moveInDirection [D,U,L,R] $ repeat (c,mv)) playerStacks
+
+g1 = makeMove (initialGameState 4) (Place Flat ('a',2))
+g2 = makeMove g1 (Place Flat ('a',1))
 g3 = makeMove g2 (Move 1 ('a',1) U [1])
 g4 = makeMove g3 (Place Flat ('a',1))
 g5 = makeMove g4 (Move 2 ('a',2) D [2])

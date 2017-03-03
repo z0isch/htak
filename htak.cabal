@@ -39,6 +39,7 @@ executable htak-exe
                      , ansi-wl-pprint
                      , trifecta
                      , lens
+                     , containers
   default-language:    Haskell2010
 
 test-suite htak-test
