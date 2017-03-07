@@ -178,6 +178,9 @@ updateBoard _ bs (Move i c d xs) = go bs i c xs
         flattenWall s = s
 updateBoard _ bs _ = bs
 
+moves :: GameState -> [Move]
+moves gs = placeMoves gs ++ moveMoves gs
+
 placeMoves :: GameState -> [Move]
 placeMoves gs = [Place pT c | pT <- validPieceTypes, c <- emptySpaces]
   where
@@ -191,14 +194,22 @@ placeMoves gs = [Place pT c | pT <- validPieceTypes, c <- emptySpaces]
     pieceTypes (0,_) = [Cap]
     pieceTypes _     = [Flat,Standing,Cap]
 
-isTopPieceType :: GameState -> Coord -> PieceType -> Bool
-isTopPieceType gs c pT = maybe False ((==) pT . snd) $ gs^.gsBoard.at c >>= headMay
+moveMoves :: GameState -> [Move]
+moveMoves gs
+  | isFirstTwoTurns gs = []
+  | otherwise          = concatMap mkMoves $ validCoordsToMove gs
+  where 
+    mkMoves (c,d) = map (\i -> Move (sum i) c d i) (drops gs (c,d))
 
-isEmpty :: GameState -> Coord -> Bool
-isEmpty gs c = maybe False null $ gs^.gsBoard.at c
-
-isValidRegularMoveTo :: GameState -> Coord -> Bool
-isValidRegularMoveTo gs c = isEmpty gs c || isTopPieceType gs c Flat
+validCoordsToMove :: GameState -> [(Coord,Direction)]
+validCoordsToMove gs = concatMap (\c -> map (\d -> (c,d)) (filter (canGoDir c) [U,D,L,R])) playerCoords
+  where
+    playerCoords = M.keys $ M.filter topIsPlayers (gs^.gsBoard)
+    topIsPlayers = maybe False ((==) (gs^.gsCurrPlayer) . fst) . headMay      
+    canGoDir c d = isValidRegularMoveTo gs (goDirection d c) || canSmash (gs^.gsBoard.at c)
+      where
+        canSmash (Just ((_,Cap):[])) = isTopPieceType gs (goDirection d c) Standing
+        canSmash _ = False
 
 drops :: GameState -> (Coord, Direction) -> [[Int]]
 drops gs (c,d) = go c $ map snd $ (gs^.gsBoard) M.! c
@@ -206,35 +217,23 @@ drops gs (c,d) = go c $ map snd $ (gs^.gsBoard) M.! c
     go :: Coord -> [PieceType] -> [[Int]]
     go _ [] = [[]]
     go c' ps@(p:_)
-      | not (M.member nextCoord (gs^.gsBoard)) = []
-      | canGoFurther = concatMap (\i -> map ((:) i) (nextLevel i))  [1..length ps]
-      | otherwise    = [[length ps]]
+      | notValidCoord = []
+      | canGoFurther  = concatMap (\i -> map ((:) i) (nextLevel i))  [1..length ps]
+      | otherwise     = [[length ps]]
       where
+        notValidCoord = not (M.member nextCoord (gs^.gsBoard))
         nextLevel i = go nextCoord $ take (length ps - i) ps
-        nextCoord = goDirection d c'
-        canSmash = length ps == 1 && p == Cap && isTopPieceType gs nextCoord Standing
         canGoFurther = isValidRegularMoveTo gs nextCoord || canSmash 
+        canSmash = length ps == 1 && p == Cap && isTopPieceType gs nextCoord Standing
+        nextCoord = goDirection d c'
 
-validCoordsToMove :: GameState -> [(Coord,Direction)]
-validCoordsToMove gs = concatMap (\c -> map (\d -> (c,d)) (filter (canGoDir c) [U,D,L,R])) playerCoords
-  where
-    topIsPlayers = maybe False ((==) (gs^.gsCurrPlayer) . fst) . headMay  
-    playerCoords = M.keys $ M.filter topIsPlayers (gs^.gsBoard)
-    canGoDir c d = isValidRegularMoveTo gs (goDirection d c) || canSmash (gs^.gsBoard.at c)
-      where
-        canSmash (Just ((_,Cap):[])) = isTopPieceType gs (goDirection d c) Standing
-        canSmash _ = False
+isValidRegularMoveTo :: GameState -> Coord -> Bool
+isValidRegularMoveTo gs c = isEmpty || isTopPieceType gs c Flat
+  where isEmpty = maybe False null $ gs^.gsBoard.at c
 
+isTopPieceType :: GameState -> Coord -> PieceType -> Bool
+isTopPieceType gs c pT = maybe False ((==) pT . snd) $ gs^.gsBoard.at c >>= headMay
 
-moveMoves :: GameState -> [Move]
-moveMoves gs
-  | isFirstTwoTurns gs = []
-  | otherwise          = concatMap f $ validCoordsToMove gs
-  where 
-    f (c,d) = map (\i -> Move (sum i) c d i) (drops gs (c,d))
-
-moves :: GameState -> [Move]
-moves gs = placeMoves gs ++ moveMoves gs
 
 g1 = makeMove (initialGameState 4) (Place Flat ('a',2))
 g2 = makeMove g1 (Place Flat ('a',1))
