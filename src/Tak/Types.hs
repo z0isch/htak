@@ -13,7 +13,6 @@ import           Data.Map.Strict  (Map)
 import qualified Data.Map.Strict  as M
 import           Data.Maybe
 import           Safe (headMay)
-import Data.Bool (bool)
 
 type File = Char
 type Rank = Int
@@ -69,6 +68,9 @@ data GameState = GameState
   }
   deriving (Eq,Show)
 makeLenses ''GameState
+
+isFirstTwoTurns :: GameState -> Bool
+isFirstTwoTurns gs = length (DL.toList (gs^.gsMoves)) < 2
 
 nonStanding :: Player -> BoardState -> BoardState
 nonStanding p = M.filter (maybe False isPlayerStanding . headMay)
@@ -176,40 +178,63 @@ updateBoard _ bs (Move i c d xs) = go bs i c xs
         flattenWall s = s
 updateBoard _ bs _ = bs
 
-moves :: GameState -> [Move]
-moves gs = placeMoves ++ moveMoves
+placeMoves :: GameState -> [Move]
+placeMoves gs = [Place pT c | pT <- validPieceTypes, c <- emptySpaces]
   where
-    firstTwoTurns = length (DL.toList (gs^.gsMoves)) < 2
-    validPieceTypes 
-      | firstTwoTurns = [Flat]
-      | otherwise = (\(r,c) -> bool [Flat,Standing] []  (r==0) 
-                            ++ bool [Cap] [] (c==0))
-                    $ (gs^.gsSupplyPieces) M.! (gs^.gsCurrPlayer)
     emptySpaces = M.keys $ M.filter null (gs^.gsBoard)                      
-    placeMoves = [Place pT c | pT <- validPieceTypes, c <- emptySpaces]
-    playerStacks = M.filter (maybe False ((==) (gs^.gsCurrPlayer) . fst) . headMay) (gs^.gsBoard)
-    moveInDirection :: Direction -> (Coord, [(Player,PieceType)]) -> [Move]
-    moveInDirection d (c, pcs) = concatMap goMove takes
+    currPlayerSupply = (gs^.gsSupplyPieces) M.! (gs^.gsCurrPlayer)
+    validPieceTypes 
+      | isFirstTwoTurns gs = [Flat]
+      | otherwise          = pieceTypes currPlayerSupply
+    pieceTypes (0,0) = []
+    pieceTypes (_,0) = [Flat,Standing]
+    pieceTypes (0,_) = [Cap]
+    pieceTypes _     = [Flat,Standing,Cap]
+
+isTopPieceType :: GameState -> Coord -> PieceType -> Bool
+isTopPieceType gs c pT = maybe False ((==) pT . snd) $ gs^.gsBoard.at c >>= headMay
+
+isEmpty :: GameState -> Coord -> Bool
+isEmpty gs c = maybe False null $ gs^.gsBoard.at c
+
+isValidRegularMoveTo :: GameState -> Coord -> Bool
+isValidRegularMoveTo gs c = isEmpty gs c || isTopPieceType gs c Flat
+
+drops :: GameState -> (Coord, Direction) -> [[Int]]
+drops gs (c,d) = go c $ map snd $ (gs^.gsBoard) M.! c
+  where
+    go :: Coord -> [PieceType] -> [[Int]]
+    go _ [] = [[]]
+    go c' ps@(p:_)
+      | not (M.member nextCoord (gs^.gsBoard)) = []
+      | canGoFurther = concatMap (\i -> map ((:) i) (nextLevel i))  [1..length ps]
+      | otherwise    = [[length ps]]
       where
-        takes = [1..(min (gs^.gsBoardSize) (length pcs))]
-        goMove i =  map (Move i c d) $ go c $ take i (map snd pcs)
-        go :: Coord -> [PieceType] -> [[Int]]
-        go _ [] = []
-        go c' ps@(p:_)
-          | canGoInDir = map (\i -> concatMap ((:) i) (go nextCoord (dropFromEnd i ps))) [1..length ps]
-          | otherwise = []
-          where
-            canGoInDir = isEmpty || isPieceType Flat || canSmash
-            isEmpty = maybe False null nextSpot
-            isPieceType pT = maybe False ((==) pT . snd) (nextSpot >>= headMay)
-            canSmash = length ps == 1 && p == Cap && isPieceType Standing
-            dropFromEnd i = reverse . drop i . reverse
-            nextSpot = gs^.gsBoard.at nextCoord
-            nextCoord = goDirection d c'
-    moveMoves 
-      | firstTwoTurns = []
-      | otherwise     = concat $ M.elems $ 
-        M.mapWithKey (\c mv ->concat $ zipWith moveInDirection [D,U,L,R] $ repeat (c,mv)) playerStacks
+        nextLevel i = go nextCoord $ take (length ps - i) ps
+        nextCoord = goDirection d c'
+        canSmash = length ps == 1 && p == Cap && isTopPieceType gs nextCoord Standing
+        canGoFurther = isValidRegularMoveTo gs nextCoord || canSmash 
+
+validCoordsToMove :: GameState -> [(Coord,Direction)]
+validCoordsToMove gs = concatMap (\c -> map (\d -> (c,d)) (filter (canGoDir c) [U,D,L,R])) playerCoords
+  where
+    topIsPlayers = maybe False ((==) (gs^.gsCurrPlayer) . fst) . headMay  
+    playerCoords = M.keys $ M.filter topIsPlayers (gs^.gsBoard)
+    canGoDir c d = isValidRegularMoveTo gs (goDirection d c) || canSmash (gs^.gsBoard.at c)
+      where
+        canSmash (Just ((_,Cap):[])) = isTopPieceType gs (goDirection d c) Standing
+        canSmash _ = False
+
+
+moveMoves :: GameState -> [Move]
+moveMoves gs
+  | isFirstTwoTurns gs = []
+  | otherwise          = concatMap f $ validCoordsToMove gs
+  where 
+    f (c,d) = map (\i -> Move (sum i) c d i) (drops gs (c,d))
+
+moves :: GameState -> [Move]
+moves gs = placeMoves gs ++ moveMoves gs
 
 g1 = makeMove (initialGameState 4) (Place Flat ('a',2))
 g2 = makeMove g1 (Place Flat ('a',1))
