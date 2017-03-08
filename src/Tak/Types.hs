@@ -201,25 +201,18 @@ placeMoves gs = [Place pT c | pT <- validPieceTypes, c <- emptySpaces]
 moveMoves :: GameState -> [Move]
 moveMoves gs
   | isFirstTwoTurns gs = []
-  | otherwise          = concatMap mkMoves $ validCoordsToMove gs
+  | otherwise          = concatMap mkAllMoves playerCoords
   where 
-    mkMoves (c,d) = map (\i -> Move (sum i) c d i) (drops gs (c,d))
-
-validCoordsToMove :: GameState -> [(Coord,Direction)]
-validCoordsToMove gs = concatMap (\c -> map (\d -> (c,d)) (filter (canGoDir c) [U,D,L,R])) playerCoords
-  where
+    mkAllMoves c = concat $ zipWith mkMoves (repeat c) [L,R,U,D]
+    mkMoves c d = map (\i -> Move (sum i) c d i) (drops gs c d)
     playerCoords = M.keys $ M.filter topIsPlayers (gs^.gsBoard)
-    topIsPlayers = maybe False ((==) (gs^.gsCurrPlayer) . fst) . headMay      
-    canGoDir c d = isValidRegularMoveTo gs (goDirection d c) || canSmash (gs^.gsBoard.at c)
-      where
-        canSmash (Just ((_,Cap):[])) = isTopPieceType gs (goDirection d c) Standing
-        canSmash _ = False
+    topIsPlayers = maybe False ((==) (gs^.gsCurrPlayer) . fst) . headMay
 
-drops :: GameState -> (Coord, Direction) -> [[Int]]
-drops gs (c,d) = concatMap (go c . flip take pts) [1..min (gs^.gsBoardSize) (length pts)]
+drops :: GameState -> Coord -> Direction -> [[Int]]
+drops gs c d = concatMap (go c . flip take pts) takes
   where
+    takes = [1..min (gs^.gsBoardSize) (length pts)]
     pts = map snd $ (gs^.gsBoard) M.! c
-    go :: Coord -> [PieceType] -> [[Int]]
     go _ [] = [[]]
     go c' ps@(p:_)
       | notValidCoord = []
@@ -228,16 +221,11 @@ drops gs (c,d) = concatMap (go c . flip take pts) [1..min (gs^.gsBoardSize) (len
       where
         notValidCoord = not (M.member nextCoord (gs^.gsBoard))
         nextLevel i = go nextCoord $ take (length ps - i) ps
-        canGoFurther = isValidRegularMoveTo gs nextCoord || canSmash 
-        canSmash = length ps == 1 && p == Cap && isTopPieceType gs nextCoord Standing
+        canGoFurther = nextEmpty || nextTopPieceType Flat || canSmash 
+        canSmash = length ps == 1 && p == Cap && nextTopPieceType Standing
+        nextEmpty = maybe False null $ gs^.gsBoard.at nextCoord
+        nextTopPieceType pT = maybe False ((==) pT . snd) $ gs^.gsBoard.at nextCoord >>= headMay
         nextCoord = goDirection d c'
-
-isValidRegularMoveTo :: GameState -> Coord -> Bool
-isValidRegularMoveTo gs c = isEmpty || isTopPieceType gs c Flat
-  where isEmpty = maybe False null $ gs^.gsBoard.at c
-
-isTopPieceType :: GameState -> Coord -> PieceType -> Bool
-isTopPieceType gs c pT = maybe False ((==) pT . snd) $ gs^.gsBoard.at c >>= headMay
 
 g1 = makeMove (initialGameState 4) (Place Flat ('a',2))
 g2 = makeMove g1 (Place Flat ('a',1))
