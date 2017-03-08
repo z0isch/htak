@@ -11,6 +11,12 @@ import           Text.Trifecta
 main :: IO ()
 main =  print 1
 
+movesChecker :: IO [Bool]
+movesChecker = do
+  mvs <- concatMap rights <$> getMoves "./ptn/game1.ptn"
+  let gss = scanl' makeMove (initialGameState 6) mvs
+  return $ zipWith (\m gs -> m `elem` moves gs) mvs gss
+
 getGame :: IO [GameState]
 getGame =  do
   mvs <- concatMap rights <$> getMoves "./ptn/game1.ptn"

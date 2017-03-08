@@ -26,7 +26,7 @@ manhattenDist (x1,y1) (x2,y2) = abs (ord x1 - ord x2) + abs (y1-y2)
 
 type BoardSize = Int
 type BoardState = Map Coord [(Player,PieceType)]
-type PieceSupply = Map Player (Int, Int)
+type PieceSupply = (Int, Int)
 
 data Player = Player1 | Player2
   deriving (Eq, Show, Ord)
@@ -62,13 +62,22 @@ data GameState = GameState
   { _gsBoard         :: BoardState
   , _gsMoves         :: DList Move
   , _gsCurrPlayer    :: Player
-  , _gsSupplyPieces  :: PieceSupply
+  , _gsPlayer1Supply :: PieceSupply
+  , _gsPlayer2Supply :: PieceSupply
   , _gsGameOverState :: Maybe GameOverState
   , _gsBoardSize     :: BoardSize
   }
   deriving (Eq,Show)
 makeLenses ''GameState
 
+pieceSupplies :: Getter GameState [PieceSupply]
+pieceSupplies = to (\gs -> [gs^.gsPlayer1Supply, gs^.gsPlayer1Supply])
+
+currPlayerSupply :: Lens' GameState PieceSupply
+currPlayerSupply f gs = case gs^.gsCurrPlayer of
+    Player1 -> gsPlayer1Supply f gs
+    Player2 -> gsPlayer2Supply f gs
+  
 isFirstTwoTurns :: GameState -> Bool
 isFirstTwoTurns gs = length (DL.toList (gs^.gsMoves)) < 2
 
@@ -82,7 +91,8 @@ initialGameState s = GameState
                $ concatMap (zip (take s ['a'..]) . repeat) [1..s]
   , _gsMoves = DL.empty
   , _gsCurrPlayer = Player1
-  , _gsSupplyPieces = M.insert Player2 (pieces s) $ M.insert Player1 (pieces s) M.empty
+  , _gsPlayer1Supply = pieces s
+  , _gsPlayer2Supply = pieces s
   , _gsGameOverState = Nothing
   , _gsBoardSize = s
   }
@@ -95,32 +105,28 @@ initialGameState s = GameState
     pieces _ = error "Can't play a game of this size"
 
 makeMove :: GameState -> Move -> GameState
-makeMove gs m  = GameState
-  { _gsBoardSize = gs^.gsBoardSize
-  , _gsMoves = updatedMoves
-  , _gsBoard = updatedBoard
-  , _gsCurrPlayer = updatedPlayer
-  , _gsSupplyPieces = updatedSupply
-  , _gsGameOverState = updatedGameOver
-  }
+makeMove gs m  = newState
   where
-    playersMove = if length (DL.toList (gs^.gsMoves)) < 2
+    newState = gs &
+      set gsBoard updatedBoard &
+      set gsGameOverState updatedGameOver &
+      over currPlayerSupply updateSupply &
+      over gsMoves (`DL.snoc` m) &
+      over gsCurrPlayer nextPlayer
+    playersMove = if isFirstTwoTurns gs
                   then nextPlayer (gs^.gsCurrPlayer)
                   else gs^.gsCurrPlayer
-    updatedMoves = DL.snoc (gs^.gsMoves) m
-    updatedPlayer = nextPlayer $ gs^.gsCurrPlayer
     updatedBoard = updateBoard playersMove (gs^.gsBoard) m
-    updatedSupply = case m of
-      (Place Cap _) -> updateSupply _2
-      (Place _ _)   -> updateSupply _1
-      _             -> gs^.gsSupplyPieces
-    updateSupply l = M.update (Just . over l pred) playersMove (gs^.gsSupplyPieces)
+    updateSupply (r,c) = case m of
+      (Place Cap _) -> (r,c-1)
+      (Place _ _)   -> (r-1,c)
+      _             -> (r,c)
     updatedGameOver = case m of
-      Resign  -> Just (ResignWin updatedPlayer)
+      Resign  -> Just (ResignWin (newState^.gsCurrPlayer))
       _ -> case roadWon of
-        Nothing -> flatWin updatedSupply updatedBoard
+        Nothing -> flatWin (newState^.pieceSupplies) (newState^.gsBoard)
         _ -> roadWon
-    roadWon = roadWin (gs^.gsCurrPlayer) (gs^.gsBoardSize) updatedBoard
+    roadWon = roadWin (gs^.gsCurrPlayer) (newState^.gsBoardSize) (newState^.gsBoard)
 
 road :: Player -> BoardSize -> BoardState -> Maybe [Coord]
 road p s b = headMay $ mapMaybe shortestPath edgePairs
@@ -147,7 +153,7 @@ roadWin p s bs
     p1Road = road Player1 s bs
     p2Road = road Player2 s bs
 
-flatWin :: PieceSupply -> BoardState -> Maybe GameOverState
+flatWin :: [PieceSupply] -> BoardState -> Maybe GameOverState
 flatWin ps bs
   | noneInSupply = case compare p1Count p2Count of
                    GT -> Just (FlatWin Player1)
@@ -185,10 +191,9 @@ placeMoves :: GameState -> [Move]
 placeMoves gs = [Place pT c | pT <- validPieceTypes, c <- emptySpaces]
   where
     emptySpaces = M.keys $ M.filter null (gs^.gsBoard)                      
-    currPlayerSupply = (gs^.gsSupplyPieces) M.! (gs^.gsCurrPlayer)
     validPieceTypes 
       | isFirstTwoTurns gs = [Flat]
-      | otherwise          = pieceTypes currPlayerSupply
+      | otherwise          = pieceTypes (gs^.currPlayerSupply)
     pieceTypes (0,0) = []
     pieceTypes (_,0) = [Flat,Standing]
     pieceTypes (0,_) = [Cap]
@@ -212,8 +217,9 @@ validCoordsToMove gs = concatMap (\c -> map (\d -> (c,d)) (filter (canGoDir c) [
         canSmash _ = False
 
 drops :: GameState -> (Coord, Direction) -> [[Int]]
-drops gs (c,d) = go c $ map snd $ (gs^.gsBoard) M.! c
+drops gs (c,d) = concatMap (go c . flip take pts) [1..min (gs^.gsBoardSize) (length pts)]
   where
+    pts = map snd $ (gs^.gsBoard) M.! c
     go :: Coord -> [PieceType] -> [[Int]]
     go _ [] = [[]]
     go c' ps@(p:_)
@@ -233,7 +239,6 @@ isValidRegularMoveTo gs c = isEmpty || isTopPieceType gs c Flat
 
 isTopPieceType :: GameState -> Coord -> PieceType -> Bool
 isTopPieceType gs c pT = maybe False ((==) pT . snd) $ gs^.gsBoard.at c >>= headMay
-
 
 g1 = makeMove (initialGameState 4) (Place Flat ('a',2))
 g2 = makeMove g1 (Place Flat ('a',1))
