@@ -108,15 +108,14 @@ makeMove :: GameState -> Move -> GameState
 makeMove gs m  = newState
   where
     newState = gs &
-      set gsBoard updatedBoard &
-      set gsGameOverState updatedGameOver &
-      over currPlayerSupply updateSupply &
       over gsMoves (`DL.snoc` m) &
+      over gsBoard (updateBoard playersMove m) &
+      over currPlayerSupply updateSupply &
+      set gsGameOverState updatedGameOver &
       over gsCurrPlayer nextPlayer
-    playersMove = if isFirstTwoTurns gs
-                  then nextPlayer (gs^.gsCurrPlayer)
-                  else gs^.gsCurrPlayer
-    updatedBoard = updateBoard playersMove (gs^.gsBoard) m
+    playersMove
+      | isFirstTwoTurns gs = nextPlayer (gs^.gsCurrPlayer)
+      | otherwise          = gs^.gsCurrPlayer
     updateSupply (r,c) = case m of
       (Place Cap _) -> (r,c-1)
       (Place _ _)   -> (r-1,c)
@@ -165,9 +164,9 @@ flatWin ps bs
     p2Count = M.size $ nonStanding  Player2 bs
     noneInSupply = elem 0 $ fmap (uncurry (+)) ps
 
-updateBoard :: Player -> BoardState -> Move -> BoardState
-updateBoard player bs (Place pT c) = M.insert c [(player, pT)] bs
-updateBoard _ bs (Move i c d xs) = go bs i c xs
+updateBoard :: Player -> Move -> BoardState -> BoardState
+updateBoard player (Place pT c) bs = M.insert c [(player, pT)] bs
+updateBoard _ (Move i c d xs) bs = go bs i c xs
   where
     go m _ _ [] = m
     go m i' c' (x':xs') = go newBoard (i' - x') newCoord xs'
@@ -182,7 +181,7 @@ updateBoard _ bs (Move i c d xs) = go bs i c xs
           | otherwise = id
         flattenWall Standing = Flat
         flattenWall s = s
-updateBoard _ bs _ = bs
+updateBoard _ _ bs = bs
 
 moves :: GameState -> [Move]
 moves gs = placeMoves gs ++ moveMoves gs
