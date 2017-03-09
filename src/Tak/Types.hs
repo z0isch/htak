@@ -70,8 +70,10 @@ data GameState = GameState
   deriving (Eq,Show)
 makeLenses ''GameState
 
-pieceSupplies :: Getter GameState [PieceSupply]
-pieceSupplies = to (\gs -> [gs^.gsPlayer1Supply, gs^.gsPlayer1Supply])
+otherPlayerSupply :: Lens' GameState PieceSupply
+otherPlayerSupply f gs = case gs^.gsCurrPlayer of
+    Player1 -> gsPlayer2Supply f gs
+    Player2 -> gsPlayer1Supply f gs
 
 currPlayerSupply :: Lens' GameState PieceSupply
 currPlayerSupply f gs = case gs^.gsCurrPlayer of
@@ -105,28 +107,30 @@ initialGameState s = GameState
     pieces _ = error "Can't play a game of this size"
 
 makeMove :: GameState -> Move -> GameState
-makeMove gs m  = newState
+makeMove gs m = gs &
+                set gsBoard updatedBoard &
+                set currPlayerSupply updatedSupply &
+                set gsGameOverState updatedGameOver &
+                set gsCurrPlayer nextToPlay &
+                over gsMoves (`DL.snoc` m)
   where
-    newState = gs &
-      over gsMoves (`DL.snoc` m) &
-      over gsBoard (updateBoard playersMove m) &
-      over currPlayerSupply updateSupply &
-      set gsGameOverState updatedGameOver &
-      over gsCurrPlayer nextPlayer
-    playersMove
-      | isFirstTwoTurns gs = nextPlayer (gs^.gsCurrPlayer)
-      | otherwise          = gs^.gsCurrPlayer
+    updatedGameOver = case m of
+      Resign  -> Just (ResignWin nextToPlay)
+      _ -> case roadWon of
+        Nothing -> flatWin [gs^.otherPlayerSupply, updatedSupply] updatedBoard
+        _ -> roadWon
+    roadWon = roadWin (gs^.gsCurrPlayer) (gs^.gsBoardSize) updatedBoard
+    updatedSupply = updateSupply (gs^.currPlayerSupply)
     updateSupply (r,c) = case m of
       (Place Cap _) -> (r,c-1)
       (Place _ _)   -> (r-1,c)
       _             -> (r,c)
-    updatedGameOver = case m of
-      Resign  -> Just (ResignWin (newState^.gsCurrPlayer))
-      _ -> case roadWon of
-        Nothing -> flatWin (newState^.pieceSupplies) (newState^.gsBoard)
-        _ -> roadWon
-    roadWon = roadWin (gs^.gsCurrPlayer) (newState^.gsBoardSize) (newState^.gsBoard)
-
+    updatedBoard = updateBoard playersMove m (gs^.gsBoard) 
+    playersMove
+      | isFirstTwoTurns gs = nextToPlay
+      | otherwise          = gs^.gsCurrPlayer 
+    nextToPlay = nextPlayer $ gs^.gsCurrPlayer
+      
 road :: Player -> BoardSize -> BoardState -> Maybe [Coord]
 road p s b = headMay $ mapMaybe shortestPath edgePairs
   where
@@ -204,22 +208,22 @@ moveMoves gs
   | otherwise          = concatMap mkAllMoves playerCoords
   where 
     mkAllMoves c = concat $ zipWith mkMoves (repeat c) [L,R,U,D]
-    mkMoves c d = map (\i -> Move (sum i) c d i) (drops gs c d)
+    mkMoves c d = map (\i -> Move (sum i) c d i) (possibleDrops gs c d)
     playerCoords = M.keys $ M.filter topIsPlayers (gs^.gsBoard)
     topIsPlayers = maybe False ((==) (gs^.gsCurrPlayer) . fst) . headMay
 
-drops :: GameState -> Coord -> Direction -> [[Int]]
-drops gs c d = concatMap (go c . flip take pts) takes
+possibleDrops :: GameState -> Coord -> Direction -> [[Int]]
+possibleDrops gs c d = concatMap (go c . flip take pts) piecesToPickUp
   where
-    takes = [1..min (gs^.gsBoardSize) (length pts)]
+    piecesToPickUp = [1..min (gs^.gsBoardSize) (length pts)]
     pts = map snd $ (gs^.gsBoard) M.! c
     go _ [] = [[]]
     go c' ps@(p:_)
-      | notValidCoord = []
+      | not validCoord = []
       | canGoFurther  = concatMap (\i -> map ((:) i) (nextLevel i))  [1..length ps]
       | otherwise     = [[length ps]]
       where
-        notValidCoord = not (M.member nextCoord (gs^.gsBoard))
+        validCoord = M.member nextCoord (gs^.gsBoard)
         nextLevel i = go nextCoord $ take (length ps - i) ps
         canGoFurther = nextEmpty || nextTopPieceType Flat || canSmash 
         canSmash = length ps == 1 && p == Cap && nextTopPieceType Standing
