@@ -107,12 +107,11 @@ initialGameState s = GameState
     pieces _ = error "Can't play a game of this size"
 
 makeMove :: GameState -> Move -> GameState
-makeMove gs m = gs &
-                set gsBoard updatedBoard &
-                set currPlayerSupply updatedSupply &
-                set gsGameOverState updatedGameOver &
-                set gsCurrPlayer nextToPlay &
-                over gsMoves (`DL.snoc` m)
+makeMove gs m = gs & set gsBoard updatedBoard 
+                   & set currPlayerSupply updatedSupply 
+                   & set gsGameOverState updatedGameOver 
+                   & set gsCurrPlayer nextToPlay
+                   & over gsMoves (`DL.snoc` m)
   where
     updatedGameOver = case m of
       Resign  -> Just (ResignWin nextToPlay)
@@ -213,18 +212,19 @@ moveMoves gs
     topIsPlayers = maybe False ((==) (gs^.gsCurrPlayer) . fst) . headMay
 
 possibleDrops :: GameState -> Coord -> Direction -> [[Int]]
-possibleDrops gs c d = concatMap (go c . flip take pts) piecesToPickUp
+possibleDrops gs c d = concatMap (go c) piecesToPickUp
   where
-    piecesToPickUp = [1..min (gs^.gsBoardSize) (length pts)]
+    piecesToPickUp = map (flip take pts) numsToPickUp
+    numsToPickUp = [1..min (gs^.gsBoardSize) (length pts)]
     pts = map snd $ (gs^.gsBoard) M.! c
     go _ [] = [[]]
     go c' ps@(p:_)
-      | not validCoord = []
-      | canGoFurther  = concatMap (\i -> map ((:) i) (nextLevel i))  [1..length ps]
+      | invalidCoord = []
+      | canGoFurther  = concatMap nextLevel [1..length ps]
       | otherwise     = [[length ps]]
       where
-        validCoord = M.member nextCoord (gs^.gsBoard)
-        nextLevel i = go nextCoord $ take (length ps - i) ps
+        invalidCoord = M.notMember nextCoord (gs^.gsBoard)
+        nextLevel i = map (i:) $ go nextCoord $ take (length ps - i) ps
         canGoFurther = nextEmpty || nextTopPieceType Flat || canSmash 
         canSmash = length ps == 1 && p == Cap && nextTopPieceType Standing
         nextEmpty = maybe False null $ gs^.gsBoard.at nextCoord
