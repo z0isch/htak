@@ -21,14 +21,14 @@ main = print (scanl' makeMove (initialGameState 6) mvs)
       Failure _ -> []
       Success (_,ms) -> concatMap rights $ map (map fst.rights) ms
 
-getPlayTakString :: Int -> IO B.ByteString
-getPlayTakString i = do
+getPlayTakPTNString :: Int -> IO B.ByteString
+getPlayTakPTNString i = do
   r <- get $ "https://playtak.com/games/" ++ show i
   return (BL.toStrict $ r^.responseBody) 
 
 getGameFromPlayTak :: Int -> IO PTNGame
 getGameFromPlayTak i = do
-  g <- getPlayTakString i
+  g <- getPlayTakPTNString i
   return $ case parseByteString gameParser mempty g of
         Failure xs -> error $ displayS (renderPretty 0.8 80 xs) ""
         Success s -> s
