@@ -4,13 +4,18 @@ import           Control.Applicative
 import           Data.Maybe
 import           Tak.Types
 import           Text.Trifecta
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as M
 
 type InformationalMark = String
 type Comment = String
+type Metadata = Map String String
 type PTNMove = [Either Comment (Either GameOverState Move,Maybe InformationalMark)]
+type PTNGame = (Metadata, [PTNMove])
 
-gameParser :: Parser [PTNMove]
-gameParser = some (token ptnMoveParser)
+gameParser :: Parser PTNGame
+gameParser = (,) <$> metadata <*> (token whiteSpace *> some (token ptnMoveParser))
+  where metadata = M.fromList <$> some (token metadataParser)
 
 ptnMoveParser :: Parser PTNMove
 ptnMoveParser = lineNumParser *> some eParser
@@ -58,6 +63,9 @@ coordParser = (,) <$> lower <*> int
 
 int :: Parser Int
 int = read . (:[]) <$> digit
+
+metadataParser :: Parser (String,String)
+metadataParser = brackets $ (,) <$> many alphaNum <*> (space *> stringLiteral)
 
 pieceTypeParser :: Parser PieceType
 pieceTypeParser = try capParser <|> try standingParser <|> flatParser

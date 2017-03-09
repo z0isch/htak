@@ -1,3 +1,13 @@
+[Site "PlayTak.com"]
+[Event "Online Play"]
+[Date "2016.12.21"]
+[Time "03:06:45"]
+[Player1 "SultanPepper"]
+[Player2 "UnSweet"]
+[Clock "15:0 +20"]
+[Result "F-0"]
+[Size "6"]
+
 1. a6 a1
 2. c3 b2
 3. d3 b3

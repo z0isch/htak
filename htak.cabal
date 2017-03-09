@@ -40,6 +40,8 @@ executable htak-exe
                      , trifecta
                      , lens
                      , containers
+                     , wreq
+                     , bytestring
   default-language:    Haskell2010
 
 test-suite htak-test
