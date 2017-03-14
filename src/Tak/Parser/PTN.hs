@@ -68,11 +68,10 @@ metadataParser :: Parser (String,String)
 metadataParser = brackets $ (,) <$> many alphaNum <*> (space *> stringLiteral)
 
 pieceTypeParser :: Parser PieceType
-pieceTypeParser = choice [capParser, standingParser, flatParser]
-  where
-    capParser = Cap <$ char 'C'
-    standingParser = Standing <$ char 'S'
-    flatParser = Flat <$ skipOptional (char 'F')
+pieceTypeParser = choice [ Cap <$ char 'C'
+                         , Standing <$ char 'S'
+                         , Flat <$ skipOptional (char 'F')
+                         ]
 
 directionParser :: Parser Direction
 directionParser = choice [ U <$ char '+'
