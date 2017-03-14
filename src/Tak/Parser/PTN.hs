@@ -1,11 +1,11 @@
 module Tak.Parser.PTN where
 
 import           Control.Applicative
+import           Data.Map.Strict     (Map)
+import qualified Data.Map.Strict     as M
 import           Data.Maybe
 import           Tak.Types
 import           Text.Trifecta
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as M
 
 type InformationalMark = String
 type Comment = String
@@ -39,13 +39,13 @@ moveParser = try moveStoneParser <|> placeParser
 
 gameOverParser :: Parser GameOverState
 gameOverParser =  choice [ Draw      <$ string "1/2-1/2"
-                         , RoadWin   <$> choice [ Player1 <$ string "R-0" 
+                         , RoadWin   <$> choice [ Player1 <$ string "R-0"
                                                 , Player2 <$ string "0-R"
                                                 ]
-                         , FlatWin   <$> choice [ Player1 <$ string "F-0" 
+                         , FlatWin   <$> choice [ Player1 <$ string "F-0"
                                                 , Player2 <$ string "0-F"
                                                 ]
-                         , ResignWin <$> choice [ Player1 <$ string "1-0" 
+                         , ResignWin <$> choice [ Player1 <$ string "1-0"
                                                 , Player2 <$ string "0-1"
                                                 ]
                          ]

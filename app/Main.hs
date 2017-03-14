@@ -1,18 +1,18 @@
 module Main where
 
 import           Control.Lens
+import qualified Data.ByteString              as B
+import qualified Data.ByteString.Lazy         as BL
 import           Data.Either
 import           Data.List
-import qualified Data.Map.Strict as M
+import qualified Data.Map.Strict              as M
+import           Data.Maybe
+import           Network.Wreq
 import           Tak.Parser.PTN
 import           Tak.Printer.PTN
 import           Tak.Types
+import           Text.PrettyPrint.ANSI.Leijen (displayS, renderPretty)
 import           Text.Trifecta
-import           Network.Wreq
-import qualified Data.ByteString.Lazy as BL
-import qualified Data.ByteString as B
-import Text.PrettyPrint.ANSI.Leijen (renderPretty, displayS)
-import Data.Maybe
 
 main :: IO ()
 main = print (scanl' makeMove (initialGameState 6) mvs)
@@ -24,7 +24,7 @@ main = print (scanl' makeMove (initialGameState 6) mvs)
 getPlayTakPTNString :: Int -> IO B.ByteString
 getPlayTakPTNString i = do
   r <- get $ "https://playtak.com/games/" ++ show i
-  return (BL.toStrict $ r^.responseBody) 
+  return (BL.toStrict $ r^.responseBody)
 
 getGameFromPlayTak :: Int -> IO PTNGame
 getGameFromPlayTak i = do
@@ -40,10 +40,10 @@ getGameStates :: PTNGame -> [GameState]
 getGameStates g = scanl' makeMove (initialGameState (getBoardSize g)) $ getMoves g
 
 getBoardSize :: PTNGame -> BoardSize
-getBoardSize (md,_) = read $ md M.! "Size" 
+getBoardSize (md,_) = read $ md M.! "Size"
 
 validateGameState :: PTNGame -> Bool
-validateGameState g@(md,_) 
+validateGameState g@(md,_)
   | resignWin = movesChecker
   | otherwise = movesChecker && winnerChecker
   where

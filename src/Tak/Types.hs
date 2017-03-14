@@ -12,7 +12,7 @@ import qualified Data.HashSet     as H
 import           Data.Map.Strict  (Map)
 import qualified Data.Map.Strict  as M
 import           Data.Maybe
-import           Safe (headMay)
+import           Safe             (headMay)
 
 type File = Char
 type Rank = Int
@@ -79,7 +79,7 @@ currPlayerSupply :: Lens' GameState PieceSupply
 currPlayerSupply f gs = case gs^.gsCurrPlayer of
     Player1 -> gsPlayer1Supply f gs
     Player2 -> gsPlayer2Supply f gs
-  
+
 isFirstTwoTurns :: GameState -> Bool
 isFirstTwoTurns gs = length (DL.toList (gs^.gsMoves)) < 2
 
@@ -107,9 +107,9 @@ initialGameState s = GameState
     pieces _ = error "Can't play a game of this size"
 
 makeMove :: GameState -> Move -> GameState
-makeMove gs m = gs & set gsBoard updatedBoard 
-                   & set currPlayerSupply updatedSupply 
-                   & set gsGameOverState updatedGameOver 
+makeMove gs m = gs & set gsBoard updatedBoard
+                   & set currPlayerSupply updatedSupply
+                   & set gsGameOverState updatedGameOver
                    & set gsCurrPlayer nextToPlay
                    & over gsMoves (`DL.snoc` m)
   where
@@ -124,12 +124,12 @@ makeMove gs m = gs & set gsBoard updatedBoard
       (Place Cap _) -> (r,c-1)
       (Place _ _)   -> (r-1,c)
       _             -> (r,c)
-    updatedBoard = updateBoard playersMove m (gs^.gsBoard) 
+    updatedBoard = updateBoard playersMove m (gs^.gsBoard)
     playersMove
       | isFirstTwoTurns gs = nextToPlay
-      | otherwise          = gs^.gsCurrPlayer 
+      | otherwise          = gs^.gsCurrPlayer
     nextToPlay = nextPlayer $ gs^.gsCurrPlayer
-      
+
 road :: Player -> BoardSize -> BoardState -> Maybe [Coord]
 road p s b = headMay $ mapMaybe shortestPath edgePairs
   where
@@ -192,8 +192,8 @@ moves gs = placeMoves gs ++ moveMoves gs
 placeMoves :: GameState -> [Move]
 placeMoves gs = [Place pT c | pT <- validPieceTypes, c <- emptySpaces]
   where
-    emptySpaces = M.keys $ M.filter null (gs^.gsBoard)                      
-    validPieceTypes 
+    emptySpaces = M.keys $ M.filter null (gs^.gsBoard)
+    validPieceTypes
       | isFirstTwoTurns gs = [Flat]
       | otherwise          = pieceTypes (gs^.currPlayerSupply)
     pieceTypes (0,0) = []
@@ -205,7 +205,7 @@ moveMoves :: GameState -> [Move]
 moveMoves gs
   | isFirstTwoTurns gs = []
   | otherwise          = concatMap mkAllMoves playerCoords
-  where 
+  where
     mkAllMoves c = concat $ zipWith mkMoves (repeat c) [L,R,U,D]
     mkMoves c d = map (\i -> Move (sum i) c d i) (possibleDrops gs c d)
     playerCoords = M.keys $ M.filter topIsPlayers (gs^.gsBoard)
@@ -225,7 +225,7 @@ possibleDrops gs c d = concatMap (go c) piecesToPickUp
       where
         invalidCoord = M.notMember nextCoord (gs^.gsBoard)
         nextLevel i = map (i:) $ go nextCoord $ take (length ps - i) ps
-        canGoFurther = nextEmpty || nextTopPieceType Flat || canSmash 
+        canGoFurther = nextEmpty || nextTopPieceType Flat || canSmash
         canSmash = length ps == 1 && p == Cap && nextTopPieceType Standing
         nextEmpty = maybe False null $ gs^.gsBoard.at nextCoord
         nextTopPieceType pT = maybe False ((==) pT . snd) $ gs^.gsBoard.at nextCoord >>= headMay
