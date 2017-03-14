@@ -28,8 +28,7 @@ ptnMoveParser = lineNumParser *> some eParser
                       <*> optional informationalMarkParser
 
 moveParser :: Parser Move
-moveParser = try moveStoneParser
-             <|> placeParser
+moveParser = try moveStoneParser <|> placeParser
   where
     moveStoneParser = Move <$> (fromMaybe 0 <$> optional int)
                           <*> coordParser
@@ -39,17 +38,18 @@ moveParser = try moveStoneParser
                         <*> coordParser
 
 gameOverParser :: Parser GameOverState
-gameOverParser =  drawParser
-             <|> try roadWinParser
-             <|> try flatWinParser
-             <|> resignParser
+gameOverParser =  choice [ drawParser
+                         , roadWinParser
+                         , flatWinParser
+                         , resignParser
+                         ]
   where
     drawParser = Draw <$ string "1/2-1/2"
-    roadWinParser = try (RoadWin Player1 <$ string "R-0")
+    roadWinParser = RoadWin Player1 <$ string "R-0"
                     <|> RoadWin Player2 <$ string "0-R"
-    flatWinParser = try (FlatWin Player1 <$ string "F-0")
+    flatWinParser = FlatWin Player1 <$ string "F-0"
                     <|> FlatWin Player2 <$ string "0-F"
-    resignParser =  try (ResignWin Player1 <$ string "1-0")
+    resignParser =  ResignWin Player1 <$ string "1-0"
                     <|> ResignWin Player2 <$ string "0-1"
 
 informationalMarkParser :: Parser InformationalMark
@@ -68,14 +68,15 @@ metadataParser :: Parser (String,String)
 metadataParser = brackets $ (,) <$> many alphaNum <*> (space *> stringLiteral)
 
 pieceTypeParser :: Parser PieceType
-pieceTypeParser = try capParser <|> try standingParser <|> flatParser
+pieceTypeParser = choice [capParser, standingParser, flatParser]
   where
     capParser = Cap <$ char 'C'
     standingParser = Standing <$ char 'S'
     flatParser = Flat <$ skipOptional (char 'F')
 
 directionParser :: Parser Direction
-directionParser = try (U <$ char '+')
-                  <|> try (D <$ char '-')
-                  <|> try (L <$ char '<')
-                  <|> (R <$ char '>')
+directionParser = choice [ U <$ char '+'
+                         , D <$ char '-'
+                         , L <$ char '<'
+                         , R <$ char '>'
+                         ]
