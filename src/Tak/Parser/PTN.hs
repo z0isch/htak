@@ -30,10 +30,10 @@ ptnMoveParser = lineNumParser *> some eParser
 moveParser :: Parser Move
 moveParser = try moveStoneParser <|> placeParser
   where
-    moveStoneParser = Move <$> (fromMaybe 0 <$> optional int)
-                          <*> coordParser
-                          <*> directionParser
-                          <*> (many int <* skipOptional pieceTypeParser)
+    moveStoneParser = Move <$> fromMaybe 0 <$> optional int
+                           <*> coordParser
+                           <*> directionParser
+                           <*> many int <* skipOptional pieceTypeParser
     placeParser = Place <$> pieceTypeParser
                         <*> coordParser
 
@@ -66,9 +66,9 @@ metadataParser :: Parser (String,String)
 metadataParser = brackets $ (,) <$> many alphaNum <*> (space *> stringLiteral)
 
 pieceTypeParser :: Parser PieceType
-pieceTypeParser = choice [ Cap <$ char 'C'
+pieceTypeParser = choice [ Cap      <$ char 'C'
                          , Standing <$ char 'S'
-                         , Flat <$ skipOptional (char 'F')
+                         , Flat     <$ skipOptional (char 'F')
                          ]
 
 directionParser :: Parser Direction
