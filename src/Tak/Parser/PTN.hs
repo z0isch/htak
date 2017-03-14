@@ -38,19 +38,17 @@ moveParser = try moveStoneParser <|> placeParser
                         <*> coordParser
 
 gameOverParser :: Parser GameOverState
-gameOverParser =  choice [ drawParser
-                         , roadWinParser
-                         , flatWinParser
-                         , resignParser
+gameOverParser =  choice [ Draw      <$ string "1/2-1/2"
+                         , RoadWin   <$> choice [ Player1 <$ string "R-0" 
+                                                , Player2 <$ string "0-R"
+                                                ]
+                         , FlatWin   <$> choice [ Player1 <$ string "F-0" 
+                                                , Player2 <$ string "0-F"
+                                                ]
+                         , ResignWin <$> choice [ Player1 <$ string "1-0" 
+                                                , Player2 <$ string "0-1"
+                                                ]
                          ]
-  where
-    drawParser = Draw <$ string "1/2-1/2"
-    roadWinParser = RoadWin Player1 <$ string "R-0"
-                    <|> RoadWin Player2 <$ string "0-R"
-    flatWinParser = FlatWin Player1 <$ string "F-0"
-                    <|> FlatWin Player2 <$ string "0-F"
-    resignParser =  ResignWin Player1 <$ string "1-0"
-                    <|> ResignWin Player2 <$ string "0-1"
 
 informationalMarkParser :: Parser InformationalMark
 informationalMarkParser = some (oneOf "?!'")
