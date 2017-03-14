@@ -206,7 +206,7 @@ moveMoves gs
   | isFirstTwoTurns gs = []
   | otherwise          = concatMap mkAllMoves playerCoords
   where
-    mkAllMoves c = concat $ zipWith mkMoves (repeat c) [L,R,U,D]
+    mkAllMoves c = concatMap (mkMoves c) [L,R,U,D]
     mkMoves c d = map (\i -> Move (sum i) c d i) (possibleDrops gs c d)
     playerCoords = M.keys $ M.filter topIsPlayers (gs^.gsBoard)
     topIsPlayers = maybe False ((==) (gs^.gsCurrPlayer) . fst) . headMay
@@ -214,7 +214,7 @@ moveMoves gs
 possibleDrops :: GameState -> Coord -> Direction -> [[Int]]
 possibleDrops gs c d = concatMap (go c) piecesToPickUp
   where
-    piecesToPickUp = map (flip take pts) numsToPickUp
+    piecesToPickUp = map (`take` pts) numsToPickUp
     numsToPickUp = [1..min (gs^.gsBoardSize) (length pts)]
     pts = map snd $ (gs^.gsBoard) M.! c
     go _ [] = [[]]

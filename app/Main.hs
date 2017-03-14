@@ -19,7 +19,7 @@ main = print (scanl' makeMove (initialGameState 6) mvs)
   where
     mvs = case parseString gameParser mempty game1 of
       Failure _ -> []
-      Success (_,ms) -> concatMap rights $ map (map fst.rights) ms
+      Success (_,ms) -> concatMap (rights . map fst . rights) ms
 
 getPlayTakPTNString :: Int -> IO B.ByteString
 getPlayTakPTNString i = do
@@ -34,7 +34,7 @@ getGameFromPlayTak i = do
         Success s -> s
 
 getMoves :: PTNGame -> [Move]
-getMoves (_,ptnMs) = concatMap rights $ map (map fst.rights) ptnMs
+getMoves (_,ptnMs) = concatMap (rights . map fst .rights) ptnMs
 
 getGameStates :: PTNGame -> [GameState]
 getGameStates g = scanl' makeMove (initialGameState (getBoardSize g)) $ getMoves g
@@ -50,7 +50,7 @@ validateGameState g@(md,_)
     resignWin = gameWinner == "1-0" || gameWinner == "0-1"
     movesChecker = and $ zipWith (\m gs -> m `elem` moves gs) ms gss
     winnerChecker = fromMaybe False w
-    w = (== gameWinner) . printMove . Left  <$> (last gss)^.gsGameOverState
+    w = (== gameWinner) . printMove . Left  <$> last gss^.gsGameOverState
     gameWinner = md M.! "Result"
     ms = getMoves g
     gss = getGameStates g
