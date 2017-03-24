@@ -71,12 +71,7 @@ aiGame = do
     p <- liftIO blackOrWhite
     aiGameState .= gs
     aiHumanPlayer .= p
-    let loop = do
-            aiLoop
-            s <- get
-            liftIO $ print (s^.aiGameState) >> putStrLn ""
-            unless (isJust $ s^.aiGameState^.gsGameOverState) loop
-    loop
+    aiLoop
     s <- get
     liftIO $ print $ s^.aiGameState^.gsGameOverState
 
@@ -87,5 +82,8 @@ aiLoop = do
     m <- if isPlayersTurn
          then getPlayersMove
          else liftIO $ (s^.aiAi) (s^.aiGameState)
-    unless isPlayersTurn $ liftIO $ putStrLn $ "- AI: " ++ printMove (Right m)
     aiGameState %= (`makeMove` m)
+    s <- get
+    unless isPlayersTurn $ liftIO $ putStrLn $ "- AI: " ++ printMove (Right m)
+    liftIO $ print (s^.aiGameState) >> putStrLn ""
+    unless (isJust $ s^.aiGameState^.gsGameOverState) aiLoop
