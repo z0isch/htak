@@ -230,24 +230,3 @@ possibleDrops gs c d = concatMap (go c) piecesToPickUp
         nextEmpty = maybe False null $ gs^.gsBoard.at nextCoord
         nextTopPieceType pT = maybe False ((==) pT . snd) $ gs^.gsBoard.at nextCoord >>= headMay
         nextCoord = goDirection d c'
-
-g1 = makeMove (initialGameState 4) (Place Flat ('a',2))
-g2 = makeMove g1 (Place Flat ('a',1))
-g3 = makeMove g2 (Move 1 ('a',1) U [1])
-g4 = makeMove g3 (Place Flat ('a',1))
-g5 = makeMove g4 (Move 2 ('a',2) D [2])
-g6 = makeMove g5 (Place Flat ('a',2))
-g7 = makeMove g6 (Move 3 ('a',1) U [2,1])
-g8 = makeMove g7 (Place Standing ('b',1))
-g9 = makeMove g8 (Place Cap ('b',2))
-g10 = makeMove g9 (Place Flat ('c',1))
-g11 = makeMove g10 (Move 1 ('b',2) D [1])
-g12 = makeMove g11 (Place Flat ('d',4))
-
-w1 = makeMove (initialGameState 4) (Place Flat ('a',1))
-w2 = makeMove w1 (Place Flat ('b',1))
-w3 = makeMove w2 (Place Flat ('a',2))
-w4 = makeMove w3 (Place Flat ('b',2))
-w5 = makeMove w4 (Place Flat ('a',3))
-w6 = makeMove w5 (Place Flat ('b',3))
-w7 = makeMove w6 (Place Cap ('a',4))
