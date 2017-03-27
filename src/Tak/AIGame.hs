@@ -8,32 +8,25 @@ import           Control.Monad.IO.Class
 import           Control.Monad.Trans.State
 import           Data.Maybe
 import           Safe                         (readMay)
-import           System.Random
+import qualified Tak.AI.Random                as Random
 import           Tak.Parser.PTN
 import           Tak.Printer.PTN
 import           Tak.Types
 import           Text.PrettyPrint.ANSI.Leijen (putDoc)
 import           Text.Trifecta
 
-type AI = GameState -> IO Move
 data AIGameState = AIGameState
     { _aiGameState   :: GameState
     , _aiHumanPlayer :: Player
-    , _aiAi          :: AI
+    , _aiAi          :: GameState -> IO Move
     }
 makeLenses ''AIGameState
 
-type AIGame = StateT AIGameState IO
-
-randomAi :: GameState -> IO Move
-randomAi gs = do
-    let validMoves = moves gs
-    m <- randomRIO (0,length validMoves - 1)
-    return $ validMoves !! m
-
 runAiGame :: IO ()
-runAiGame = mkState >>= evalStateT aiGame
-    where mkState = AIGameState <$> initializeGameState <*> blackOrWhite <*> chooseAI
+runAiGame = do
+    s <- AIGameState <$> initializeGameState <*> blackOrWhite <*> chooseAI
+    win <- execStateT aiLoop s
+    print $ win^.aiGameState.gsGameOverState
 
 initializeGameState :: IO GameState
 initializeGameState = do
@@ -53,36 +46,32 @@ blackOrWhite = do
         if p == "b" then return Player2
         else putStrLn "- Please input w or b" >> blackOrWhite
 
-chooseAI :: IO AI
+chooseAI :: IO (GameState -> IO Move)
 chooseAI = do
     p <- putStr "Choose AI: (1) Random " >> getLine
-    if p == "1" then return randomAi
+    if p == "1" then return $ Random.ai
     else putStrLn "- Please input 1" >> chooseAI
 
-getPlayersMove :: AIGame Move
-getPlayersMove = do
-    aiGs <- get
-    mS <- liftIO $ putStr "Move? " >> getLine
+getPlayersMove :: GameState -> IO Move
+getPlayersMove gs = do
+    mS <- putStr "Move? " >> getLine
     case parseString moveParser mempty mS of
-        Failure d -> liftIO (putDoc d >> putStrLn "") >> getPlayersMove
-        Success m -> if m `elem` moves (aiGs^.aiGameState)
+        Failure d -> putDoc d >> putStrLn "" >> getPlayersMove gs
+        Success m -> if m `elem` moves gs
                      then return m
                      else do
                         _ <- liftIO $ putStrLn $ "Can't make this move: " ++ show m
-                        getPlayersMove
+                        getPlayersMove gs
 
-aiGame :: AIGame ()
-aiGame = aiLoop >> use (aiGameState.gsGameOverState) >>= liftIO . print
-
-aiLoop :: AIGame ()
+aiLoop :: StateT AIGameState IO ()
 aiLoop = do
     s <- get
     let isPlayersTurn = s^.aiGameState.gsCurrPlayer == s^.aiHumanPlayer
     m <- if isPlayersTurn
-         then getPlayersMove
+         then liftIO $ getPlayersMove (s^.aiGameState)
          else liftIO $ (s^.aiAi) (s^.aiGameState)
     aiGameState %= (`makeMove` m)
-    s' <- get
     unless isPlayersTurn $ liftIO $ putStrLn $ "- AI: " ++ printMove (Right m)
-    liftIO $ print (s'^.aiGameState) >> putStrLn ""
-    unless (isJust $ s'^.aiGameState.gsGameOverState) aiLoop
+    gs <- use aiGameState
+    liftIO $ print gs >> putStrLn ""
+    when (isNothing $ gs^.gsGameOverState) aiLoop

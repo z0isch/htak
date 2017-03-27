@@ -18,6 +18,7 @@ library
   ghc-options:         -Wall
   exposed-modules:     Tak.Types
                      , Tak.AIGame
+                     , Tak.AI.Random
                      , Tak.Parser.PTN
                      , Tak.Printer.PTN
   build-depends:       base >= 4.7 && < 5
