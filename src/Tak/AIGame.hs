@@ -33,7 +33,11 @@ randomAi gs = do
     return $ validMoves !! m
 
 runAiGame :: IO ()
-runAiGame = void $ execStateT aiGame $ AIGameState undefined undefined randomAi
+runAiGame = do
+    gs <- initializeGameState
+    p <- blackOrWhite
+    _ <- execStateT aiGame $ AIGameState gs p randomAi
+    return ()
 
 initializeGameState :: IO GameState
 initializeGameState = do
@@ -67,18 +71,14 @@ getPlayersMove = do
 
 aiGame :: AIGame ()
 aiGame = do
-    gs <- liftIO initializeGameState
-    p <- liftIO blackOrWhite
-    aiGameState .= gs
-    aiHumanPlayer .= p
     aiLoop
     s <- get
-    liftIO $ print $ s^.aiGameState^.gsGameOverState
+    liftIO $ print $ s^.aiGameState.gsGameOverState
 
 aiLoop :: AIGame ()
 aiLoop = do
     s <- get
-    let isPlayersTurn = s^.aiGameState^.gsCurrPlayer == s^.aiHumanPlayer
+    let isPlayersTurn = s^.aiGameState.gsCurrPlayer == s^.aiHumanPlayer
     m <- if isPlayersTurn
          then getPlayersMove
          else liftIO $ (s^.aiAi) (s^.aiGameState)
@@ -86,4 +86,4 @@ aiLoop = do
     s <- get
     unless isPlayersTurn $ liftIO $ putStrLn $ "- AI: " ++ printMove (Right m)
     liftIO $ print (s^.aiGameState) >> putStrLn ""
-    unless (isJust $ s^.aiGameState^.gsGameOverState) aiLoop
+    unless (isJust $ s^.aiGameState.gsGameOverState) aiLoop
