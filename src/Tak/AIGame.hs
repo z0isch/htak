@@ -32,10 +32,8 @@ randomAi gs = do
     return $ validMoves !! m
 
 runAiGame :: IO ()
-runAiGame = do
-    gs <- AIGameState <$> initializeGameState <*> blackOrWhite <*> chooseAI
-    _ <- execStateT aiGame gs
-    return ()
+runAiGame = mkState >>= evalStateT aiGame
+    where mkState = AIGameState <$> initializeGameState <*> blackOrWhite <*> chooseAI
 
 initializeGameState :: IO GameState
 initializeGameState = do
