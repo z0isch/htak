@@ -5,7 +5,6 @@ module Tak.AIGame where
 import           Control.Lens
 import           Control.Monad
 import           Control.Monad.IO.Class
-import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.State
 import           Data.Maybe
 import           Safe                         (readMay)
@@ -60,7 +59,7 @@ blackOrWhite = do
 getPlayersMove :: AIGame Move
 getPlayersMove = do
     aiGs <- get
-    mS <- liftIO (putStr "Move? ") >> liftIO getLine
+    mS <- liftIO $ putStr "Move? " >> getLine
     case parseString moveParser mempty mS of
         Failure d -> liftIO (putDoc d >> putStrLn "") >> getPlayersMove
         Success m -> if m `elem` moves (aiGs^.aiGameState)
@@ -70,10 +69,7 @@ getPlayersMove = do
                         getPlayersMove
 
 aiGame :: AIGame ()
-aiGame = do
-    aiLoop
-    s <- get
-    liftIO $ print $ s^.aiGameState.gsGameOverState
+aiGame = aiLoop >> use (aiGameState.gsGameOverState) >>= liftIO . print
 
 aiLoop :: AIGame ()
 aiLoop = do
@@ -83,7 +79,7 @@ aiLoop = do
          then getPlayersMove
          else liftIO $ (s^.aiAi) (s^.aiGameState)
     aiGameState %= (`makeMove` m)
-    s <- get
+    s' <- get
     unless isPlayersTurn $ liftIO $ putStrLn $ "- AI: " ++ printMove (Right m)
-    liftIO $ print (s^.aiGameState) >> putStrLn ""
-    unless (isJust $ s^.aiGameState.gsGameOverState) aiLoop
+    liftIO $ print (s'^.aiGameState) >> putStrLn ""
+    unless (isJust $ s'^.aiGameState.gsGameOverState) aiLoop
