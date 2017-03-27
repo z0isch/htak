@@ -33,9 +33,8 @@ randomAi gs = do
 
 runAiGame :: IO ()
 runAiGame = do
-    gs <- initializeGameState
-    p <- blackOrWhite
-    _ <- execStateT aiGame $ AIGameState gs p randomAi
+    gs <- AIGameState <$> initializeGameState <*> blackOrWhite <*> chooseAI
+    _ <- execStateT aiGame gs
     return ()
 
 initializeGameState :: IO GameState
@@ -55,6 +54,12 @@ blackOrWhite = do
     else
         if p == "b" then return Player2
         else putStrLn "- Please input w or b" >> blackOrWhite
+
+chooseAI :: IO AI
+chooseAI = do
+    p <- putStr "Choose AI: (1) Random " >> getLine
+    if p == "1" then return randomAi
+    else putStrLn "- Please input 1" >> chooseAI
 
 getPlayersMove :: AIGame Move
 getPlayersMove = do
