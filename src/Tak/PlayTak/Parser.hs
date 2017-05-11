@@ -12,7 +12,7 @@ import           Tak.PlayTak.Types
 import           Text.Trifecta
 
 -- This will keep drawing and parsing from the pipe until it finds one that ends in a \n
-parseMsg :: PP.Parser ByteString IO [Result PlayTakMessage]
+parseMsg :: (Monad m) => PP.Parser ByteString m [Result PlayTakMessage]
 parseMsg = go initialParse
     where
         initialParse = stepParser (release mempty *> playTakMessageParser) mempty mempty
