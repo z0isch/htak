@@ -6,6 +6,7 @@
 module Tak.PlayTak.Test where
 
 import           Control.Concurrent.Async
+import           Control.Lens
 import           Data.ByteString          (ByteString)
 import           Data.Text                (Text)
 import           Pipes
@@ -22,27 +23,23 @@ import qualified Text.Trifecta            as Tri
 f :: IO ()
 f = connect "playtak.com" "10000" $ \(connectionSocket,_) -> do
     let act1 = runEffect $ PB.stdin >-> toSocket connectionSocket
-        act2 = runEffect $ playTakPipeParse connectionSocket >-> PP.print
+        act2 = runEffect $ runParser (fromSocket connectionSocket 4096) >-> PP.print
     concurrently act1 act2
     return ()
 
+runParser :: (MonadIO m) => Producer ByteString m () -> Producer [PlayTakMessage] m ()
+runParser p = do
+    (x, p') <- lift (runStateT parseMsg p)
+    let isSuccess (Tri.Success _) = True
+        isSuccess _ = False
+        successes =  filter isSuccess x
+        failures = filter (not . isSuccess) x
+    mapM_ (liftIO . print) failures
+    yield $ map (\(Tri.Success s) -> s) successes
+    runParser p'
 
-playTakPipeParse :: Socket -> Producer [PlayTakMessage] IO ()
-playTakPipeParse connectionSocket = runParser $ fromSocket connectionSocket 1
-  where
---    linesOfSocket :: Producer PB.ByteString IO ()
---    linesOfSocket = concats (fromSocket connectionSocket 4096 ^. PB.lines)
-    runParser :: Producer ByteString IO () -> Producer [PlayTakMessage] IO ()
-    runParser p = do
-        (x, p') <- lift (runStateT parseMsg p)
-        let isSuccess (Tri.Success _) = True
-            isSuccess _ = False
-            successes =  filter isSuccess x
-            failures = filter (not . isSuccess) x
-        mapM_ (liftIO . print) failures
-        yield $ map (\(Tri.Success s) -> s) successes
-        runParser p'
-
+linesOfSocket :: Socket -> Producer PB.ByteString IO ()
+linesOfSocket s = concats (fromSocket s 4096 ^. PB.lines)
 
 data BotState = BotState {}
     deriving (Eq, Show)
