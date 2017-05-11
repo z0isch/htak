@@ -49,7 +49,7 @@ blackOrWhite = do
 chooseAI :: IO (GameState -> IO Move)
 chooseAI = do
     p <- putStr "Choose AI: (1) Random " >> getLine
-    if p == "1" then return $ Random.ai
+    if p == "1" then return Random.ai
     else putStrLn "- Please input 1" >> chooseAI
 
 getPlayersMove :: GameState -> IO Move
