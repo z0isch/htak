@@ -29,12 +29,9 @@ parseMsg = go initialParse
                             parsed = zipWith runParser parseAll (s:repeat initialParse)
                             runParser i = starve . feed i
                             partialStep = if null parseAll then s else initialParse
-                            partiallyParsed = if BS.null partialParse
-                                              then Nothing
-                                              else Just $ feed i partialStep
-                        case partiallyParsed of
-                            Nothing -> return parsed
-                            Just s' ->  (++) parsed <$> go s'
+                        if BS.null partialParse
+                        then return parsed
+                        else (++) parsed <$> go (feed i partialStep)
 
 playTakMessageParser :: Parser PlayTakMessage
 playTakMessageParser = choice parsers
