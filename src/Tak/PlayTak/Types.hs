@@ -3,16 +3,16 @@ module Tak.PlayTak.Types where
 import           Data.Text
 import           Tak.Types
 
-type GameNumber = Text
+type GameNumber = Integer
 type PlayerName = Text
-type SeekNumber = Text
+type SeekNumber = Integer
 type Room = Text
 
 data PlayTakMessage = Welcome (Maybe PlayerName)
                      | LoginOrRegister
-                     | GameListAdd
-                     | GameListRemove
-                     | GameMsgStart GameNumber PlayerName PlayerName Player
+                     | GameListAdd GameNumber
+                     | GameListRemove GameNumber
+                     | GameMsgStart GameNumber BoardSize PlayerName PlayerName Player
                      | GameMsgMove GameNumber Move
                      | GameMsgTime GameNumber Integer Integer
                      | GameMsgOver GameNumber GameOverState
@@ -22,8 +22,8 @@ data PlayTakMessage = Welcome (Maybe PlayerName)
                      | GameMsgRemoveUndo GameNumber
                      | GameMsgUndo GameNumber
                      | GameMsgAbandoned GameNumber
-                     | SeekNew SeekNumber PlayerName BoardSize Integer (Maybe Player)
-                     | SeekRemove SeekNumber PlayerName BoardSize Integer (Maybe Player)
+                     | SeekNew SeekNumber PlayerName BoardSize Integer Integer (Maybe Player)
+                     | SeekRemove SeekNumber PlayerName BoardSize Integer Integer (Maybe Player)
                      | Observe
                      | Shout PlayerName Text
                      | Joined Room

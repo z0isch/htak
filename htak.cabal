@@ -41,6 +41,8 @@ library
                      , pipes-text
                      , pipes-group
                      , pipes-network
+                     , pipes-concurrency
+                     , pipes-extras
                      , bytestring
                      , foldl
                      , async
