@@ -9,13 +9,17 @@ import qualified Data.Map.Strict              as M
 import           Data.Maybe
 import           Network.Wreq
 import           Tak.Parser.PTN
+import           Tak.PlayTak.Test
 import           Tak.Printer.PTN
 import           Tak.Types
 import           Text.PrettyPrint.ANSI.Leijen (displayS, renderPretty)
 import           Text.Trifecta
 
 main :: IO ()
-main = print (scanl' makeMove (initialGameState 6) mvs)
+main = f
+
+main' :: IO ()
+main' = print (scanl' makeMove (initialGameState 6) mvs)
   where
     mvs = case parseString gameParser mempty game1 of
       Failure _ -> []

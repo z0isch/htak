@@ -8,10 +8,23 @@ import           Data.ByteString       (ByteString)
 import qualified Data.ByteString       as BS
 import qualified Data.ByteString.Char8 as BC
 import           Data.Text             (pack)
+import           Pipes
 import qualified Pipes.Parse           as PP
 import           Tak.PlayTak.Types
 import           Tak.Types
 import           Text.Trifecta
+
+-- Prints out parsing errors, returns successful parses
+runParser :: Producer ByteString IO () -> Producer [PlayTakMessage] IO ()
+runParser p = do
+    (x, p') <- lift (PP.runStateT parseMsg p)
+    let isSuccess (Success _) = True
+        isSuccess _ = False
+        successes =  filter isSuccess x
+        failures = filter (not . isSuccess) x
+    mapM_ (lift . print) failures
+    yield $ map (\(Success s) -> s) successes
+    runParser p'
 
 -- This will keep drawing and parsing from the pipe until it finds one that ends in a \n
 parseMsg :: (Monad m) => PP.Parser ByteString m [Result PlayTakMessage]
