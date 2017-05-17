@@ -33,7 +33,7 @@ import           Tak.Types
 data BotState = BotState
     { _bsName      :: Maybe Text
     , _bsAIState   :: Map GameNumber (MVar AIGameState)
-    , _bsCmdOutput :: Output ByteString
+    , _bsCmdOutput :: Output PlayTakCommand
     }
 makeLenses ''BotState
 
@@ -44,22 +44,21 @@ f :: IO ()
 f = do
     (output, input) <- spawn unbounded
     connect "playtak.com" "10000" $ \(connectionSocket,_) -> do
-        let
-            stdinP = PB.stdin >-> toOutput output
-            pinger = each (repeat "PING\n") >-> delay 15 >-> toOutput output
+        let stdinP = PB.stdin >-> PP.map PlainText >-> toOutput output
+            pinger = each (repeat Ping) >-> delay 15 >-> toOutput output
             parser = runParser (fromSocket connectionSocket 4096)
-                >-> PP.tee PP.print
-                >-> forever (await >>= each)
-                >-> botStatePipe output
-                >-> PP.map commandToBS
-                >-> toOutput output
-            toSock = fromInput input >-> toSocket connectionSocket
-        mapConcurrently_ runEffect [pinger,parser,toSock,stdinP]
+                        >-> PP.tee PP.print
+            botRunner = parser
+                        >-> forever (await >>= each)
+                        >-> botStatePipe output
+                        >-> toOutput output
+            toSock = fromInput input >-> PP.map commandToBS >-> toSocket connectionSocket
+        mapConcurrently_ runEffect [pinger,botRunner,toSock,stdinP]
 
 linesOfSocket :: Socket -> Producer PB.ByteString IO ()
 linesOfSocket s = concats (fromSocket s 4096 ^. PB.lines)
 
-botStatePipe :: Output ByteString -> Pipe PlayTakMessage PlayTakCommand IO ()
+botStatePipe :: Output PlayTakCommand -> Pipe PlayTakMessage PlayTakCommand IO ()
 botStatePipe output = go initialBotState
     where
         initialBotState = BotState Nothing M.empty output
@@ -72,14 +71,13 @@ botStatePipe output = go initialBotState
 runMsg :: BotState -> PlayTakMessage -> IO (BotState, Maybe PlayTakCommand)
 runMsg bs LoginOrRegister = return (bs, Just LoginGuest)
 runMsg bs (Welcome (Just a) )= return (set bsName (Just a) bs, Just initialSeek)
-    where initialSeek = Seek 3 600 600 (Just Player1)
+    where initialSeek = Seek 3 600 600 (Just Player2)
 runMsg bs (GameMsgStart gameNum size p1 p2 p) = do
-    aiState <- newMVar $ AIGameState (initialGameState size) (nextPlayer p) ai
-    let bs' = over bsAIState (M.insert gameNum aiState) bs
-    modifyStateAsync aiState $ \s ->
-        if s^.aiGameState.gsCurrPlayer == s^.aiHumanPlayer
-        then return s
-        else makeAIMove (bs'^.bsCmdOutput) gameNum s
+    let aiState = AIGameState (initialGameState size) (nextPlayer p) ai
+        isAITurn = aiState^.aiGameState.gsCurrPlayer /= aiState^.aiHumanPlayer
+    aiStateM <- newMVar aiState
+    let bs' = over bsAIState (M.insert gameNum aiStateM) bs
+    when isAITurn $ modifyStateAsync  aiStateM $ makeAIMove (bs'^.bsCmdOutput) gameNum
     return (bs', Nothing)
 runMsg bs (GameMsgMove gameNum m) = do
     let (Just aiState) = bs^.bsAIState.at gameNum
@@ -91,10 +89,10 @@ runMsg bs _ = return (bs, Nothing)
 modifyStateAsync :: MVar a -> (a -> IO a) -> IO ()
 modifyStateAsync s = void . async . modifyMVar_ s
 
-makeAIMove :: Output ByteString -> GameNumber -> AIGameState -> IO AIGameState
+makeAIMove :: Output PlayTakCommand -> GameNumber -> AIGameState -> IO AIGameState
 makeAIMove output gameNum s = do
     m <- (s^.aiAi) (s^.aiGameState)
-    runEffect $ yield (GameCmdMove gameNum m) >-> PP.map commandToBS >-> toOutput output
+    runEffect $ yield (GameCmdMove gameNum m) >-> toOutput output
     return $ over aiGameState (`makeMove` m) s
 
 

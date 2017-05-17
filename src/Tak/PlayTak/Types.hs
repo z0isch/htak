@@ -1,5 +1,6 @@
 module Tak.PlayTak.Types where
 
+import           Data.ByteString (ByteString)
 import           Data.Text
 import           Tak.Types
 
@@ -62,4 +63,5 @@ data PlayTakCommand = Client Text
                     | CmdTell PlayerName Text
                     | Ping
                     | Quit
+                    | PlainText ByteString
     deriving (Eq, Show)
