@@ -70,15 +70,16 @@ runMsg bs LoginOrRegister = return (bs, Just LoginGuest)
 runMsg bs (Welcome (Just a) )= return (set bsName (Just a) bs, Just initialSeek)
 runMsg bs (GameMsgStart gameNum size p1 p2 p) = do
     aiState <- newMVar initAIState
-    when isAITurn $ modifyStateAsync aiState $ makeAIMove (bs^.bsCmdOutput) gameNum
+    when isAITurn $ modifyStateAsync aiState $ makeAndSendAIMove (bs^.bsCmdOutput) gameNum
     return (over bsAIState (M.insert gameNum aiState) bs, Nothing)
     where
         initAIState = AIGameState (initialGameState size) (nextPlayer p) ai
         isAITurn = initAIState^.aiGameState.gsCurrPlayer /= initAIState^.aiHumanPlayer
 runMsg bs (GameMsgMove gameNum m) = do
+    withMVar aiState (print . view aiGameState)
     modifyStateAsync aiState $
-        makeAIMove (bs^.bsCmdOutput) gameNum . over aiGameState (`makeMove` m)
-    withMVar aiState (print . view (aiGameState.gsBoard))
+        makeAndSendAIMove (bs^.bsCmdOutput) gameNum . over aiGameState (`makeMove` m)
+    withMVar aiState (print . view aiGameState)
     return (bs, Nothing)
     where
         (Just aiState) = bs^.bsAIState.at gameNum
@@ -93,8 +94,8 @@ runMsg bs _ = return (bs, Nothing)
 modifyStateAsync :: MVar a -> (a -> IO a) -> IO ()
 modifyStateAsync s = void . async . modifyMVar_ s
 
-makeAIMove :: Output PlayTakCommand -> GameNumber -> AIGameState -> IO AIGameState
-makeAIMove output gameNum s = do
+makeAndSendAIMove :: Output PlayTakCommand -> GameNumber -> AIGameState -> IO AIGameState
+makeAndSendAIMove output gameNum s = do
     m <- (s^.aiAi) (s^.aiGameState)
     runEffect $ yield (GameCmdMove gameNum m) >-> toOutput output
     return $ over aiGameState (`makeMove` m) s

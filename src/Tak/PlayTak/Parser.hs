@@ -51,9 +51,9 @@ parseMsg = go initialParse
                         else (++) parsed <$> go (feed i partialStep)
 
 playTakMessageParser :: Parser PlayTakMessage
-playTakMessageParser = choice $ map try parsers
+playTakMessageParser = choice parsers
     where
-        parsers = [welcome,login,online,ok,nok, seekNew, seekRemove, gameListAdd, gameListRemove, gameStart, gameMove, gamePlace, gameOver, gameAbandoned]
+        parsers = map try [welcome,login,online,ok,nok, seekNew, seekRemove, gameListAdd, gameListRemove, gameStart, gameMove, gamePlace, gameOver, gameAbandoned, gameTime]
         welcome = Welcome <$> (text "Welcome" *> (optional nameParser <* char '!'))
         nameParser = pack <$> (text " " *> many (noneOf "!"))
         login = LoginOrRegister <$ text "Login or Register"
@@ -67,13 +67,14 @@ playTakMessageParser = choice $ map try parsers
         gameListAdd = GameListAdd <$> (text "GameList Add Game#" *> natural)
         gameListRemove = GameListRemove <$> (text "GameList Remove Game#" *> natural)
         gameStart = GameMsgStart <$> (text "Game Start " *> natural) <*> boardSize <*> playername <*> (text "vs " *> playername) <*> token player'
-        gamePlace = GameMsgMove <$> (text "Game#" *> (natural <* token (text "P"))) <*> placeMove
+        gamePrefix t = text "Game#" *> (natural <* token (text t))
+        gamePlace = GameMsgMove <$> gamePrefix "P" <*> placeMove
         placeMove = g <$> token coord <*> optional (oneOf "CW")
             where
                 g c Nothing = Place Flat c
                 g c (Just 'C') = Place Cap c
                 g c (Just 'W') = Place Standing c
-        gameMove = GameMsgMove <$> (text "Game#" *> (natural <* token (text "M"))) <*> moveMove
+        gameMove = GameMsgMove <$> gamePrefix "M" <*> moveMove
         moveMove = (\(c1:c2:_) xs -> Move (sum (map fromInteger xs)) c1 (d c1 c2) (map fromInteger xs)) <$> some (token coord) <*> some natural
             where d c1 c2
                     | goDirection U c1 == c2 = U
@@ -81,8 +82,9 @@ playTakMessageParser = choice $ map try parsers
                     | goDirection L c1 == c2 = L
                     | goDirection R c1 == c2 = R
         coord = (\f r -> (toLower f,read [r])) <$> letter <*> digit
-        gameOver = GameMsgOver <$> (text "Game#" *> (natural <* token (text "Over"))) <*> gameOverParser
-        gameAbandoned = GameMsgAbandoned <$> token (text "Game#" *> natural) <* text "Abandoned"
+        gameOver = GameMsgOver <$> gamePrefix "Over" <*> gameOverParser
+        gameAbandoned = GameMsgAbandoned <$> gamePrefix "Abandoned"
+        gameTime = GameMsgTime <$> gamePrefix "Time" <*> natural <*> natural
         ok = OK <$ text "OK"
         nok = NOK <$ text "NOK"
 
