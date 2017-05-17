@@ -11,6 +11,7 @@ import           Data.Char             (toLower)
 import           Data.Text             (pack)
 import           Pipes
 import qualified Pipes.Parse           as PP
+import           Tak.Parser.PTN        (gameOverParser)
 import           Tak.PlayTak.Types
 import           Tak.Types
 import           Text.Trifecta
@@ -50,9 +51,9 @@ parseMsg = go initialParse
                         else (++) parsed <$> go (feed i partialStep)
 
 playTakMessageParser :: Parser PlayTakMessage
-playTakMessageParser = choice parsers
+playTakMessageParser = choice $ map try parsers
     where
-        parsers = [welcome,login,online,ok,nok, seekNew, seekRemove, gameListAdd, gameListRemove, gameStart, try gameMove, gamePlace]
+        parsers = [welcome,login,online,ok,nok, seekNew, seekRemove, gameListAdd, gameListRemove, gameStart, gameMove, gamePlace, gameOver, gameAbandoned]
         welcome = Welcome <$> (text "Welcome" *> (optional nameParser <* char '!'))
         nameParser = pack <$> (text " " *> many (noneOf "!"))
         login = LoginOrRegister <$ text "Login or Register"
@@ -80,6 +81,8 @@ playTakMessageParser = choice parsers
                     | goDirection L c1 == c2 = L
                     | goDirection R c1 == c2 = R
         coord = (\f r -> (toLower f,read [r])) <$> letter <*> digit
+        gameOver = GameMsgOver <$> (text "Game#" *> (natural <* token (text "Over"))) <*> gameOverParser
+        gameAbandoned = GameMsgAbandoned <$> token (text "Game#" *> natural) <* text "Abandoned"
         ok = OK <$ text "OK"
         nok = NOK <$ text "NOK"
 

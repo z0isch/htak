@@ -12,15 +12,13 @@ import           Control.Monad
 import           Data.ByteString          (ByteString)
 import           Data.Map.Strict          (Map)
 import qualified Data.Map.Strict          as M
-import           Data.Maybe
 import           Data.Monoid
-import           Data.Text                (Text, pack)
+import           Data.Text                (Text)
 import           Data.Text.Encoding       (encodeUtf8)
 import           Pipes
 import qualified Pipes.ByteString         as PB
 import           Pipes.Concurrent
 import           Pipes.Extras             (delay)
-import           Pipes.Group              (concats)
 import           Pipes.Network.TCP
 import qualified Pipes.Prelude            as PP
 import           Tak.AI.Random
@@ -42,48 +40,54 @@ commandToBS = encodeUtf8 . (<> "\n") . showCommand
 
 f :: IO ()
 f = do
-    (output, input) <- spawn unbounded
+    (cmdOutput, cmdInput) <- spawn unbounded
     connect "playtak.com" "10000" $ \(connectionSocket,_) -> do
-        let stdinP = PB.stdin >-> PP.map PlainText >-> toOutput output
-            pinger = each (repeat Ping) >-> delay 15 >-> toOutput output
+        let stdinP = PB.stdin >-> PP.map PlainText >-> toOutput cmdOutput
+            pinger = each (repeat Ping) >-> delay 15 >-> toOutput cmdOutput
             parser = runParser (fromSocket connectionSocket 4096)
                         >-> PP.tee PP.print
-            botRunner = parser
                         >-> forever (await >>= each)
-                        >-> botStatePipe output
-                        >-> toOutput output
-            toSock = fromInput input >-> PP.map commandToBS >-> toSocket connectionSocket
-        mapConcurrently_ runEffect [pinger,botRunner,toSock,stdinP]
-
-linesOfSocket :: Socket -> Producer PB.ByteString IO ()
-linesOfSocket s = concats (fromSocket s 4096 ^. PB.lines)
+            botRunner = parser
+                        >-> botStatePipe cmdOutput
+                        >-> toOutput cmdOutput
+            toSock = fromInput cmdInput >-> PP.map commandToBS >-> toSocket connectionSocket
+        mapConcurrently_ runEffect [toSock,pinger,botRunner,stdinP]
 
 botStatePipe :: Output PlayTakCommand -> Pipe PlayTakMessage PlayTakCommand IO ()
 botStatePipe output = go initialBotState
     where
         initialBotState = BotState Nothing M.empty output
         go bs = do
-            msg <- await
-            (bs',cmd) <- lift $ runMsg bs msg
+            (bs',cmd) <- await >>= lift . runMsg bs
             maybe (return ()) yield cmd
             go bs'
+
+initialSeek :: PlayTakCommand
+initialSeek = Seek 3 600 600 (Just Player2)
 
 runMsg :: BotState -> PlayTakMessage -> IO (BotState, Maybe PlayTakCommand)
 runMsg bs LoginOrRegister = return (bs, Just LoginGuest)
 runMsg bs (Welcome (Just a) )= return (set bsName (Just a) bs, Just initialSeek)
-    where initialSeek = Seek 3 600 600 (Just Player2)
 runMsg bs (GameMsgStart gameNum size p1 p2 p) = do
-    let aiState = AIGameState (initialGameState size) (nextPlayer p) ai
-        isAITurn = aiState^.aiGameState.gsCurrPlayer /= aiState^.aiHumanPlayer
-    aiStateM <- newMVar aiState
-    let bs' = over bsAIState (M.insert gameNum aiStateM) bs
-    when isAITurn $ modifyStateAsync  aiStateM $ makeAIMove (bs'^.bsCmdOutput) gameNum
-    return (bs', Nothing)
+    aiState <- newMVar initAIState
+    when isAITurn $ modifyStateAsync aiState $ makeAIMove (bs^.bsCmdOutput) gameNum
+    return (over bsAIState (M.insert gameNum aiState) bs, Nothing)
+    where
+        initAIState = AIGameState (initialGameState size) (nextPlayer p) ai
+        isAITurn = initAIState^.aiGameState.gsCurrPlayer /= initAIState^.aiHumanPlayer
 runMsg bs (GameMsgMove gameNum m) = do
-    let (Just aiState) = bs^.bsAIState.at gameNum
-    modifyStateAsync aiState $ makeAIMove (bs^.bsCmdOutput) gameNum . over aiGameState (`makeMove` m)
+    modifyStateAsync aiState $
+        makeAIMove (bs^.bsCmdOutput) gameNum . over aiGameState (`makeMove` m)
     withMVar aiState (print . view (aiGameState.gsBoard))
     return (bs, Nothing)
+    where
+        (Just aiState) = bs^.bsAIState.at gameNum
+runMsg bs (GameMsgOver _ _) = return (bs, Just initialSeek)
+runMsg bs (GameMsgAbandoned gameNum) = do
+     modifyStateAsync aiState $ return . over aiGameState (`makeMove` Resign)
+     return (bs,Just initialSeek)
+     where
+        (Just aiState) = bs^.bsAIState.at gameNum
 runMsg bs _ = return (bs, Nothing)
 
 modifyStateAsync :: MVar a -> (a -> IO a) -> IO ()
