@@ -7,6 +7,7 @@ import           Control.Applicative
 import           Data.ByteString       (ByteString)
 import qualified Data.ByteString       as BS
 import qualified Data.ByteString.Char8 as BC
+import           Data.Char             (toLower)
 import           Data.Text             (pack)
 import           Pipes
 import qualified Pipes.Parse           as PP
@@ -41,8 +42,8 @@ parseMsg = go initialParse
                         let xs = BC.split '\n' i
                             parseAll = init xs
                             partialParse = last xs
-                            parsed = zipWith runParser parseAll (s:repeat initialParse)
-                            runParser i = starve . feed i
+                            parsed = zipWith runP parseAll (s:repeat initialParse)
+                            runP x = starve . feed x
                             partialStep = if null parseAll then s else initialParse
                         if BS.null partialParse
                         then return parsed
@@ -51,7 +52,7 @@ parseMsg = go initialParse
 playTakMessageParser :: Parser PlayTakMessage
 playTakMessageParser = choice parsers
     where
-        parsers = [welcome,login,online,ok,nok, seekNew, seekRemove, gameListAdd, gameListRemove, gameStart]
+        parsers = [welcome,login,online,ok,nok, seekNew, seekRemove, gameListAdd, gameListRemove, gameStart, try gameMove, gamePlace]
         welcome = Welcome <$> (text "Welcome" *> (optional nameParser <* char '!'))
         nameParser = pack <$> (text " " *> many (noneOf "!"))
         login = LoginOrRegister <$ text "Login or Register"
@@ -65,6 +66,20 @@ playTakMessageParser = choice parsers
         gameListAdd = GameListAdd <$> (text "GameList Add Game#" *> natural)
         gameListRemove = GameListRemove <$> (text "GameList Remove Game#" *> natural)
         gameStart = GameMsgStart <$> (text "Game Start " *> natural) <*> boardSize <*> playername <*> (text "vs " *> playername) <*> token player'
+        gamePlace = GameMsgMove <$> (text "Game#" *> (natural <* token (text "P"))) <*> placeMove
+        placeMove = g <$> token coord <*> optional (oneOf "CW")
+            where
+                g c Nothing = Place Flat c
+                g c (Just 'C') = Place Cap c
+                g c (Just 'W') = Place Standing c
+        gameMove = GameMsgMove <$> (text "Game#" *> (natural <* token (text "M"))) <*> moveMove
+        moveMove = (\(c1:c2:_) xs -> Move (sum (map fromInteger xs)) c1 (d c1 c2) (map fromInteger xs)) <$> some (token coord) <*> some natural
+            where d c1 c2
+                    | goDirection U c1 == c2 = U
+                    | goDirection D c1 == c2 = D
+                    | goDirection L c1 == c2 = L
+                    | goDirection R c1 == c2 = R
+        coord = (\f r -> (toLower f,read [r])) <$> letter <*> digit
         ok = OK <$ text "OK"
         nok = NOK <$ text "NOK"
 
