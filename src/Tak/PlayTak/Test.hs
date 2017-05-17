@@ -31,8 +31,9 @@ import           Tak.PlayTak.Types
 import           Tak.Types
 
 data BotState = BotState
-    { _bsName    :: Maybe Text
-    , _bsAIState :: Map GameNumber (MVar AIGameState)
+    { _bsName      :: Maybe Text
+    , _bsAIState   :: Map GameNumber (MVar AIGameState)
+    , _bsCmdOutput :: Output ByteString
     }
 makeLenses ''BotState
 
@@ -61,34 +62,39 @@ linesOfSocket s = concats (fromSocket s 4096 ^. PB.lines)
 botStatePipe :: Output ByteString -> Pipe PlayTakMessage PlayTakCommand IO ()
 botStatePipe output = go initialBotState
     where
-        initialBotState = BotState Nothing M.empty
-        initialSeek = Seek 3 600 600 (Just Player1)
+        initialBotState = BotState Nothing M.empty output
         go bs = do
             msg <- await
             (bs',cmd) <- lift $ runMsg bs msg
             maybe (return ()) yield cmd
             go bs'
-        runMsg :: BotState -> PlayTakMessage -> IO (BotState, Maybe PlayTakCommand)
-        runMsg bs LoginOrRegister = return (bs, Just LoginGuest)
-        runMsg bs (Welcome (Just a) )= return (set bsName (Just a) bs, Just initialSeek)
-        runMsg bs (GameMsgStart gameNum size p1 p2 p) = do
-            aiState <- newMVar $ AIGameState (initialGameState size) (nextPlayer p) ai
-            let bs' = over bsAIState (M.insert gameNum aiState) bs
-            modifyState aiState $ \s ->
-                if s^.aiGameState.gsCurrPlayer == s^.aiHumanPlayer
-                then return s
-                else makeAIMove gameNum s
-            return (bs', Nothing)
-        runMsg bs (GameMsgMove gameNum m) = do
-            let (Just aiState) = bs^.bsAIState.at gameNum
-            modifyState aiState $ makeAIMove gameNum . over aiGameState (`makeMove` m)
-            withMVar aiState (print . view (aiGameState.gsBoard))
-            return (bs, Nothing)
-        runMsg bs _ = return (bs, Nothing)
-        modifyState s = void . async . modifyMVar_ s
-        makeAIMove gameNum s = do
-            m <- (s^.aiAi) (s^.aiGameState)
-            runEffect $ yield (GameCmdMove gameNum m) >-> PP.map commandToBS >-> toOutput output
-            return $ over aiGameState (`makeMove` m) s
+
+runMsg :: BotState -> PlayTakMessage -> IO (BotState, Maybe PlayTakCommand)
+runMsg bs LoginOrRegister = return (bs, Just LoginGuest)
+runMsg bs (Welcome (Just a) )= return (set bsName (Just a) bs, Just initialSeek)
+    where initialSeek = Seek 3 600 600 (Just Player1)
+runMsg bs (GameMsgStart gameNum size p1 p2 p) = do
+    aiState <- newMVar $ AIGameState (initialGameState size) (nextPlayer p) ai
+    let bs' = over bsAIState (M.insert gameNum aiState) bs
+    modifyStateAsync aiState $ \s ->
+        if s^.aiGameState.gsCurrPlayer == s^.aiHumanPlayer
+        then return s
+        else makeAIMove (bs'^.bsCmdOutput) gameNum s
+    return (bs', Nothing)
+runMsg bs (GameMsgMove gameNum m) = do
+    let (Just aiState) = bs^.bsAIState.at gameNum
+    modifyStateAsync aiState $ makeAIMove (bs^.bsCmdOutput) gameNum . over aiGameState (`makeMove` m)
+    withMVar aiState (print . view (aiGameState.gsBoard))
+    return (bs, Nothing)
+runMsg bs _ = return (bs, Nothing)
+
+modifyStateAsync :: MVar a -> (a -> IO a) -> IO ()
+modifyStateAsync s = void . async . modifyMVar_ s
+
+makeAIMove :: Output ByteString -> GameNumber -> AIGameState -> IO AIGameState
+makeAIMove output gameNum s = do
+    m <- (s^.aiAi) (s^.aiGameState)
+    runEffect $ yield (GameCmdMove gameNum m) >-> PP.map commandToBS >-> toOutput output
+    return $ over aiGameState (`makeMove` m) s
 
 
