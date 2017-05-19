@@ -63,7 +63,7 @@ botStatePipe output = go initialBotState
             go bs'
 
 initialSeek :: PlayTakCommand
-initialSeek = Seek 3 600 600 Nothing
+initialSeek = Seek 5 600 600 Nothing
 
 runMsg :: BotState -> PlayTakMessage -> IO (BotState, Maybe PlayTakCommand)
 runMsg bs LoginOrRegister = return (bs, Just LoginGuest)

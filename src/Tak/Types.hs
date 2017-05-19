@@ -188,7 +188,10 @@ updateBoard _ (Move i c d xs) bs = go bs i c xs
 updateBoard _ _ bs = bs
 
 moves :: GameState -> [Move]
-moves gs = placeMoves gs ++ moveMoves gs
+moves gs
+  | gameOver  = []
+  | otherwise =  placeMoves gs ++ moveMoves gs
+  where gameOver = isJust $ gs^.gsGameOverState
 
 placeMoves :: GameState -> [Move]
 placeMoves gs = [Place pT c | pT <- validPieceTypes, c <- emptySpaces]
