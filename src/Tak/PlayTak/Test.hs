@@ -21,8 +21,8 @@ import           Pipes.Concurrent
 import           Pipes.Extras             (delay)
 import           Pipes.Network.TCP
 import qualified Pipes.Prelude            as PP
-import           Tak.AI.Random
-import           Tak.AIGame
+import           Tak.AI.BlockWin
+import           Tak.AI.Types
 import           Tak.PlayTak.Parser
 import           Tak.PlayTak.Printer
 import           Tak.PlayTak.Types
@@ -63,7 +63,7 @@ botStatePipe output = go initialBotState
             go bs'
 
 initialSeek :: PlayTakCommand
-initialSeek = Seek 3 600 600 (Just Player2)
+initialSeek = Seek 3 600 600 Nothing
 
 runMsg :: BotState -> PlayTakMessage -> IO (BotState, Maybe PlayTakCommand)
 runMsg bs LoginOrRegister = return (bs, Just LoginGuest)
@@ -76,10 +76,8 @@ runMsg bs (GameMsgStart gameNum size p1 p2 p) = do
         initAIState = AIGameState (initialGameState size) (nextPlayer p) ai
         isAITurn = initAIState^.aiGameState.gsCurrPlayer /= initAIState^.aiHumanPlayer
 runMsg bs (GameMsgMove gameNum m) = do
-    withMVar aiState (print . view aiGameState)
     modifyStateAsync aiState $
         makeAndSendAIMove (bs^.bsCmdOutput) gameNum . over aiGameState (`makeMove` m)
-    withMVar aiState (print . view aiGameState)
     return (bs, Nothing)
     where
         (Just aiState) = bs^.bsAIState.at gameNum
@@ -96,7 +94,7 @@ modifyStateAsync s = void . async . modifyMVar_ s
 
 makeAndSendAIMove :: Output PlayTakCommand -> GameNumber -> AIGameState -> IO AIGameState
 makeAndSendAIMove output gameNum s = do
-    m <- (s^.aiAi) (s^.aiGameState)
+    m <- (s^.aiAi) s
     runEffect $ yield (GameCmdMove gameNum m) >-> toOutput output
     return $ over aiGameState (`makeMove` m) s
 

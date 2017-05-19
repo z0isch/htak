@@ -1,5 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
-
 module Tak.AIGame where
 
 import           Control.Lens
@@ -9,18 +7,12 @@ import           Control.Monad.Trans.State
 import           Data.Maybe
 import           Safe                         (readMay)
 import qualified Tak.AI.Random                as Random
+import           Tak.AI.Types
 import           Tak.Parser.PTN
 import           Tak.Printer.PTN
 import           Tak.Types
 import           Text.PrettyPrint.ANSI.Leijen (putDoc)
 import           Text.Trifecta
-
-data AIGameState = AIGameState
-    { _aiGameState   :: GameState
-    , _aiHumanPlayer :: Player
-    , _aiAi          :: GameState -> IO Move
-    }
-makeLenses ''AIGameState
 
 runAiGame :: IO ()
 runAiGame = do
@@ -46,7 +38,7 @@ blackOrWhite = do
         if p == "b" then return Player2
         else putStrLn "- Please input w or b" >> blackOrWhite
 
-chooseAI :: IO (GameState -> IO Move)
+chooseAI :: IO (AIGameState -> IO Move)
 chooseAI = do
     p <- putStr "Choose AI: (1) Random " >> getLine
     if p == "1" then return Random.ai
@@ -69,7 +61,7 @@ aiLoop = do
     let isPlayersTurn = s^.aiGameState.gsCurrPlayer == s^.aiHumanPlayer
     m <- if isPlayersTurn
          then liftIO $ getPlayersMove (s^.aiGameState)
-         else liftIO $ (s^.aiAi) (s^.aiGameState)
+         else liftIO $ (s^.aiAi) s
     aiGameState %= (`makeMove` m)
     unless isPlayersTurn $ liftIO $ putStrLn $ "- AI: " ++ printMove (Right m)
     gs <- use aiGameState

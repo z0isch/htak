@@ -30,10 +30,10 @@ ptnMoveParser = lineNumParser *> some eParser
 moveParser :: Parser Move
 moveParser = try moveStoneParser <|> placeParser
   where
-    moveStoneParser = Move <$> (fromMaybe 0 <$> optional int)
+    moveStoneParser = Move <$> (fromMaybe 1 <$> optional int)
                            <*> coordParser
                            <*> directionParser
-                           <*> (many int <* skipOptional pieceTypeParser)
+                           <*> ((\xs -> if null xs then [1] else xs) <$> many int <* skipOptional pieceTypeParser)
     placeParser = Place <$> pieceTypeParser
                         <*> coordParser
 

@@ -17,6 +17,10 @@ library
   hs-source-dirs:      src
   ghc-options:         -Wall
   exposed-modules:     Tak.Types
+                     , Tak.AI.Types
+                     , AI.Gametree
+                     , AI.Minimax
+                     , Tak.AI.BlockWin
                      , Tak.AIGame
                      , Tak.AI.Random
                      , Tak.Parser.PTN
@@ -34,6 +38,8 @@ library
                      , safe
                      , astar
                      , transformers
+                     , deepseq
+                     , parallel
                      , mtl
                      , random
                      , pipes

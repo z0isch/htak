@@ -2,6 +2,7 @@
 
 module Tak.Types where
 
+import           AI.Gametree
 import           Control.Lens
 import           Data.Char        (ord)
 import           Data.DList       (DList)
@@ -212,21 +213,24 @@ moveMoves gs
     topIsPlayers = maybe False ((==) (gs^.gsCurrPlayer) . fst) . headMay
 
 possibleDrops :: GameState -> Coord -> Direction -> [[Int]]
-possibleDrops gs c d = concatMap (go c) piecesToPickUp
+possibleDrops gs c d
+  | canGoFurther (goDirection d c) pts = concatMap (go c) piecesToPickUp
+  | otherwise = []
   where
     piecesToPickUp = map (`take` pts) numsToPickUp
     numsToPickUp = [1..min (gs^.gsBoardSize) (length pts)]
     pts = map snd $ (gs^.gsBoard) M.! c
+    canGoFurther y ps = isEmpty y || isTopPieceType y Flat || canSmash y ps
+    isTopPieceType y pT = maybe False ((==) pT . snd) $ gs^.gsBoard.at y >>= headMay
+    isEmpty y = maybe False null $ gs^.gsBoard.at y
+    canSmash y ps@(p:_) = length ps == 1 && p == Cap && isTopPieceType y Standing
     go _ [] = [[]]
-    go c' ps@(p:_)
+    go c' ps
       | invalidCoord = []
-      | canGoFurther  = concatMap nextLevel [1..length ps]
-      | otherwise     = [[length ps]]
+      | canGoFurther nextCoord ps = concatMap nextLevel [1..length ps]
+      | otherwise    = [[length ps]]
       where
         invalidCoord = M.notMember nextCoord (gs^.gsBoard)
         nextLevel i = map (i:) $ go nextCoord $ take (length ps - i) ps
-        canGoFurther = nextEmpty || nextTopPieceType Flat || canSmash
-        canSmash = length ps == 1 && p == Cap && nextTopPieceType Standing
-        nextEmpty = maybe False null $ gs^.gsBoard.at nextCoord
-        nextTopPieceType pT = maybe False ((==) pT . snd) $ gs^.gsBoard.at nextCoord >>= headMay
         nextCoord = goDirection d c'
+
